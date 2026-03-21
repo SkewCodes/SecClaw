@@ -1,0 +1,26 @@
+{
+  "vault": {
+    "id": "vault-001",
+    "state": "ACTIVE",
+    "nav": 48230.15,
+    "peakNav": 50000.00,
+    "dailyPnl": -320.50,
+    "drawdownPct": 3.54,
+    "startedAt": "2026-03-20T00:00:00Z",
+    "lastCycleAt": "2026-03-22T12:00:00Z"
+  },
+  "strategy": {
+    "name": "funding-arb",
+    "version": "1.0.0",
+    "symbols": ["PERP_ETH_USDC"]
+  },
+  "circuitBreaker": {
+    "level": "YELLOW",
+    "triggeredAt": null,
+    "reason": null,
+    "cooldownUntil": null
+  },
+  "provider": "guardian",
+  "running": true,
+  "uptime": 172800
+}

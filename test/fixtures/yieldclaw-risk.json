@@ -1,0 +1,14 @@
+{
+  "circuitBreaker": {
+    "level": "YELLOW",
+    "triggeredAt": null,
+    "reason": null,
+    "cooldownUntil": null
+  },
+  "drawdownPct": 3.54,
+  "dailyPnl": -320.50,
+  "currentNav": 48230.15,
+  "peakNav": 50000.00,
+  "openPositions": 1,
+  "totalExposure": 12400.00
+}
