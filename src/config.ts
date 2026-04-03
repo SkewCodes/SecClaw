@@ -18,6 +18,7 @@ export function loadConfig(argv?: string[]): SecClawConfig {
     .option('--once', 'Run one check cycle and exit', false)
     .option('--dry-run', 'Run checks but suppress alerts', false)
     .option('--verbose', 'Enable verbose logging', false)
+    .option('--audit-mode', 'Gate logs all decisions but blocks nothing', false)
     .parse(argv ?? process.argv);
 
   const opts = program.opts();
@@ -27,6 +28,7 @@ export function loadConfig(argv?: string[]): SecClawConfig {
     once: opts.once as boolean,
     dryRun: opts.dryRun as boolean,
     verbose: opts.verbose as boolean,
+    auditMode: opts.auditMode as boolean,
     pollIntervalSec: envInt('POLL_INTERVAL_SEC', 30),
     logPath: env('LOG_PATH', './secclaw-audit.jsonl'),
     yieldclaw: {

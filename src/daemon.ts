@@ -21,9 +21,15 @@ import { DigestReporter } from './reports/digest.js';
 import { createHealthServer, type HealthState } from './health.js';
 import { fulfilled } from './utils.js';
 import { appendFileSync } from 'node:fs';
-import type { SecClawConfig, SystemSnapshot, PolicyManifest, AlertSeverity, AlertHandler } from './types.js';
+import { SecClawEventEmitter, deriveV2LogPath } from './events/emitter.js';
+import { gate as gateFunction, createGateSharedState, type GateContext } from './gate/index.js';
+import { checkSignerHealth, refreshSignerBalances } from './gate/signer-health.js';
+import type {
+  SecClawConfig, SystemSnapshot, PolicyManifest,
+  AlertSeverity, AlertHandler, GateRequest, GateResponse, GateSharedState,
+} from './types.js';
 
-const VERSION = '1.3.0';
+const VERSION = '2.0.0';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -32,9 +38,14 @@ async function main(): Promise<void> {
   console.log(`[secclaw] SecClaw v${VERSION} starting`);
   console.log(`[secclaw] Network: ${manifest.global.network}`);
   console.log(`[secclaw] Poll interval: ${config.pollIntervalSec}s`);
-  console.log(`[secclaw] Mode: ${config.once ? 'single check' : 'daemon'}${config.dryRun ? ' (dry-run)' : ''}`);
+  console.log(`[secclaw] Mode: ${config.once ? 'single check' : 'daemon'}${config.dryRun ? ' (dry-run)' : ''}${config.auditMode ? ' (audit-mode)' : ''}`);
 
   const bus = new AlertBus();
+
+  const v2LogPath = deriveV2LogPath(config.logPath);
+  const v2Emitter = new SecClawEventEmitter(v2LogPath);
+  const gateSharedState = createGateSharedState();
+  console.log(`[secclaw] V2 events logging to ${v2LogPath}`);
   bus.register(new JsonlLogger(config.logPath));
 
   const pushHandlers: AlertHandler[] = [];
@@ -98,6 +109,7 @@ async function main(): Promise<void> {
       config.manifestPath,
       (newManifest) => {
         manifest = newManifest;
+        gateCtx.manifest = newManifest;
         console.log('[secclaw] Policy manifest reloaded');
       },
       (err) => {
@@ -108,10 +120,20 @@ async function main(): Promise<void> {
     digest.start();
   }
 
+  const gateCtx: GateContext = {
+    manifest,
+    config,
+    sharedState: gateSharedState,
+    emitter: v2Emitter,
+    alertBus: bus,
+    signerHealthCheck: checkSignerHealth,
+  };
+  _gateCtx = gateCtx;
+
   const doTick = () => tick({
     bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe,
     driftDetector, correlator, escalator, digest, healthState,
-    manifest, config,
+    manifest, config, gateSharedState,
   });
 
   if (config.once) {
@@ -154,12 +176,13 @@ interface TickContext {
   healthState: HealthState;
   manifest: PolicyManifest;
   config: SecClawConfig;
+  gateSharedState: GateSharedState;
 }
 
 async function tick(ctx: TickContext): Promise<boolean> {
   const { bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe,
     driftDetector, correlator, escalator, digest, healthState,
-    manifest, config } = ctx;
+    manifest, config, gateSharedState } = ctx;
 
   const cycleStart = Date.now();
 
@@ -214,6 +237,23 @@ async function tick(ctx: TickContext): Promise<boolean> {
   correlator.record(snapshot);
   digest.record(alerts, snapshot);
 
+  gateSharedState.activeCriticalAlerts.clear();
+  for (const a of alerts) {
+    if (a.severity === 'critical') {
+      gateSharedState.activeCriticalAlerts.add(a.id);
+    }
+  }
+
+  if (manifest.signer) {
+    try {
+      await refreshSignerBalances(manifest.global.network);
+    } catch (err) {
+      if (config.verbose) {
+        console.error('[secclaw] Balance refresh failed:', (err as Error).message);
+      }
+    }
+  }
+
   const elapsed = Date.now() - cycleStart;
   healthState.lastTickAt = Date.now();
   healthState.lastTickDurationMs = elapsed;
@@ -259,6 +299,23 @@ function checkProbeFailures(snapshot: SystemSnapshot) {
   }
 
   return alerts;
+}
+
+/**
+ * Exported gate API for agents to import and call directly.
+ * Must be called after main() has started (daemon or single-check mode).
+ */
+let _gateCtx: GateContext | null = null;
+
+export function getGateContext(): GateContext {
+  if (!_gateCtx) {
+    throw new Error('Gate not initialized — daemon must be running');
+  }
+  return _gateCtx;
+}
+
+export async function callGate(request: GateRequest): Promise<GateResponse> {
+  return gateFunction(request, getGateContext());
 }
 
 main().catch((err) => {

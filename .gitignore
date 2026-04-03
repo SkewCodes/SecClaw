@@ -7,3 +7,4 @@ dist/
 !.env.example
 secclaw-audit*
 .claude/
+.secclaw/

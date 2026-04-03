@@ -107,6 +107,99 @@ const ManifestSchema = z.object({
     max_fee_changes_per_day: z.number().int().nonnegative(),
     max_campaigns_per_day: z.number().int().nonnegative(),
   }),
+
+  // ── V2 Sections (all optional for backward compat with v1.0 manifests) ──
+
+  dependencies: z.object({
+    attestation: z.enum(['strict', 'warn', 'disabled']),
+    attestation_path: z.string(),
+    advisory_severity_threshold: z.string().optional(),
+    blocked_packages: z.array(z.string()),
+    drift_action: z.enum(['block', 'alert']),
+  }).optional(),
+
+  signer: z.object({
+    immutable: z.object({
+      cumulative_exposure_ceiling_usd: z.number().positive(),
+      balance_minimum_eth: z.number().positive(),
+      nonce_mode: z.enum(['strict', 'warn']),
+      nonce_persistence_path: z.string(),
+      rate_limits_ceiling: z.object({
+        per_minute: z.number().int().positive(),
+        per_day: z.number().int().positive(),
+      }),
+      min_cooldown_ms: z.number().nonnegative(),
+      gas_ceiling_gwei: z.number().positive(),
+      gas_limit_ceiling: z.number().int().positive(),
+      modification_delay_sec: z.number().positive(),
+      critical_alert_lock: z.boolean(),
+      max_override_duration_sec: z.number().positive(),
+      multi_approval_threshold_pct: z.number().min(0).max(100),
+      multi_approval_operators: z.number().int().min(1),
+      ceiling_to_default_max_ratio: z.number().positive(),
+    }),
+    rate_limits: z.object({
+      per_minute: z.number().int().positive(),
+      per_hour: z.number().int().positive(),
+      per_day: z.number().int().positive(),
+    }),
+    cooldown_ms: z.number().nonnegative(),
+    cumulative_exposure: z.object({
+      window: z.string(),
+      max_window: z.string(),
+      max_usd: z.number().positive(),
+      delay_override_sec: z.number().positive().optional(),
+    }),
+    gas: z.object({
+      max_price_gwei: z.number().positive(),
+      max_limit: z.number().int().positive(),
+      price_mode: z.enum(['dynamic', 'fixed']),
+    }),
+    acceleration_detection: z.boolean(),
+    target_switch_detection: z.boolean(),
+    agent_overridable: z.array(z.object({
+      parameter: z.string(),
+      max_duration_sec: z.number().positive(),
+    })).optional().default([]),
+    profiles: z.record(z.object({
+      description: z.string(),
+      overrides: z.record(z.number()),
+      max_duration_sec: z.number().positive(),
+      activation_conditions: z.array(z.object({
+        type: z.string(),
+        threshold_pct: z.number().optional(),
+        threshold_gwei: z.number().optional(),
+      })),
+      require_operator_approval: z.boolean(),
+    })).optional().default({}),
+    conditional_auto_approvals: z.array(z.object({
+      parameter: z.string(),
+      max_value: z.number(),
+      max_duration_sec: z.number().positive(),
+      condition: z.object({
+        type: z.string(),
+        min_gwei: z.number().optional(),
+        min_count: z.number().optional(),
+      }),
+      verification: z.literal('daemon'),
+    })).optional().default([]),
+    approval: z.object({
+      channels: z.array(z.object({
+        type: z.string(),
+        chat_id: z.string().optional(),
+        inline_buttons: z.boolean().optional(),
+        dashboard: z.boolean().optional(),
+        enabled: z.boolean().optional(),
+      })),
+      auto_reject_after_sec: z.number().positive(),
+      require_auth: z.boolean(),
+      auth_method: z.enum(['api_key', 'siwx']),
+    }).optional(),
+  }).optional(),
+
+  contracts: z.record(z.unknown()).optional(),
+  oracle: z.record(z.unknown()).optional(),
+  mcp_tools: z.record(z.unknown()).optional(),
 });
 
 export function loadManifest(path: string): PolicyManifest {

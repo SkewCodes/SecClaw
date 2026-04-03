@@ -1,6 +1,6 @@
 {
   "name": "@orderly/secclaw",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "description": "Security, oversight, and integrity layer for autonomous trading agents on Orderly Network",
   "type": "module",
   "main": "dist/daemon.js",
@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "secclaw:attest": "tsx scripts/attest.ts"
   },
   "dependencies": {
     "commander": "^12.1.0",
