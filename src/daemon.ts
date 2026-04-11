@@ -11,6 +11,7 @@ import { MMProbe } from './probes/mm.js';
 import { PaymentLayerProbe } from './probes/payment-layer.js';
 import { OtterClawProbe } from './probes/otterclaw.js';
 import { GrowthAgentProbe } from './probes/growth-agent.js';
+import { ListingProbe } from './probes/listing.js';
 import { runAssertions } from './policy/assertion.js';
 import { DriftDetector } from './policy/drift-detector.js';
 import { AuditCorrelator } from './audit/correlator.js';
@@ -74,6 +75,7 @@ async function main(): Promise<void> {
   const guardianProbe = new PaymentLayerProbe(config.guardian.auditLogPath);
   const ocProbe = new OtterClawProbe([config.otterclaw.skillsPath, config.otterclaw.partnerSkillsPath]);
   const gaProbe = new GrowthAgentProbe(config.growthAgent.auditLogPath, config.growthAgent.statePath);
+  const listingProbe = new ListingProbe(config.listing.auditLogPath);
 
   const driftDetector = new DriftDetector();
   const correlator = new AuditCorrelator();
@@ -131,7 +133,7 @@ async function main(): Promise<void> {
   _gateCtx = gateCtx;
 
   const doTick = () => tick({
-    bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe,
+    bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe, listingProbe,
     driftDetector, correlator, escalator, digest, healthState,
     manifest, config, gateSharedState,
   });
@@ -169,6 +171,7 @@ interface TickContext {
   guardianProbe: PaymentLayerProbe;
   ocProbe: OtterClawProbe;
   gaProbe: GrowthAgentProbe;
+  listingProbe: ListingProbe;
   driftDetector: DriftDetector;
   correlator: AuditCorrelator;
   escalator: AlertEscalator;
@@ -180,7 +183,7 @@ interface TickContext {
 }
 
 async function tick(ctx: TickContext): Promise<boolean> {
-  const { bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe,
+  const { bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe, listingProbe,
     driftDetector, correlator, escalator, digest, healthState,
     manifest, config, gateSharedState } = ctx;
 
@@ -188,12 +191,13 @@ async function tick(ctx: TickContext): Promise<boolean> {
 
   if (config.verbose) console.log(`[secclaw] Tick starting at ${new Date().toISOString()}`);
 
-  const [ycResult, mmResult, guardianResult, ocResult, gaResult] = await Promise.allSettled([
+  const [ycResult, mmResult, guardianResult, ocResult, gaResult, listingResult] = await Promise.allSettled([
     ycProbe.probe(),
     mmProbe.probe(),
     guardianProbe.probe(),
     ocProbe.probe(),
     gaProbe.probe(),
+    listingProbe.probe(),
   ]);
 
   const snapshot: SystemSnapshot = {
@@ -203,6 +207,7 @@ async function tick(ctx: TickContext): Promise<boolean> {
     guardian: fulfilled(guardianResult) ?? { ok: false, error: 'Probe failed', latencyMs: 0 },
     otterclaw: fulfilled(ocResult) ?? { ok: false, error: 'Probe failed', latencyMs: 0 },
     growthAgent: fulfilled(gaResult) ?? { ok: false, error: 'Probe failed', latencyMs: 0 },
+    listing: fulfilled(listingResult) ?? { ok: false, error: 'Probe failed', latencyMs: 0 },
   };
 
   if (config.verbose) {
@@ -212,6 +217,7 @@ async function tick(ctx: TickContext): Promise<boolean> {
     console.log(`[secclaw]   Guardian: ${snapshot.guardian.ok ? 'OK' : snapshot.guardian.error} (${snapshot.guardian.latencyMs}ms)`);
     console.log(`[secclaw]   OtterClaw: ${snapshot.otterclaw.ok ? 'OK' : snapshot.otterclaw.error} (${snapshot.otterclaw.latencyMs}ms)`);
     console.log(`[secclaw]   Growth Agent: ${snapshot.growthAgent.ok ? 'OK' : snapshot.growthAgent.error} (${snapshot.growthAgent.latencyMs}ms)`);
+    console.log(`[secclaw]   Listing: ${snapshot.listing.ok ? 'OK' : snapshot.listing.error} (${snapshot.listing.latencyMs}ms)`);
   }
 
   const probeFailureAlerts = checkProbeFailures(snapshot);
@@ -242,6 +248,10 @@ async function tick(ctx: TickContext): Promise<boolean> {
     if (a.severity === 'critical') {
       gateSharedState.activeCriticalAlerts.add(a.id);
     }
+  }
+
+  if (snapshot.listing.ok && snapshot.listing.data) {
+    gateSharedState.recentListings = snapshot.listing.data.recentListings;
   }
 
   if (manifest.signer) {
@@ -287,6 +297,7 @@ function checkProbeFailures(snapshot: SystemSnapshot) {
     { name: 'payment_layer', result: snapshot.guardian },
     { name: 'otterclaw', result: snapshot.otterclaw },
     { name: 'growth_agent', result: snapshot.growthAgent },
+    { name: 'listing', result: snapshot.listing },
   ] as const;
 
   for (const p of probes) {

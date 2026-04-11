@@ -25,6 +25,7 @@ function makeSnapshot(overrides?: Partial<YieldClawSnapshot>): SystemSnapshot {
     guardian: { ok: true, latencyMs: 10, data: { recentIntents: [], spendingPerRequest: 0, spendingHourly: 0, spendingDaily: 0, logFileSize: 0, previousLogFileSize: 0 } },
     otterclaw: { ok: true, latencyMs: 20, data: { skills: [] } },
     growthAgent: { ok: true, latencyMs: 15, data: { lastCycleAt: null, cycleCount: 0, dryRun: true, builderTier: 'PUBLIC', playbooksExecuted: [], watchdogFlags: [], feeChanges: [], referralCodesCreated: 0, campaignsDeployed: 0, auditLogSize: 0, previousAuditLogSize: 0 } },
+    listing: { ok: true, latencyMs: 10, data: { recentListings: [], recentTrades: [], auditLogSize: 0, previousAuditLogSize: 0 } },
   };
 }
 

@@ -110,6 +110,22 @@ const ManifestSchema = z.object({
 
   // ── V2 Sections (all optional for backward compat with v1.0 manifests) ──
 
+  listing: z.object({
+    enabled: z.boolean(),
+    allowedBaseAssets: z.array(z.string()),
+    deniedBaseAssets: z.array(z.string()),
+    maxMarketsPerWindow: z.object({
+      count: z.number().int().positive(),
+      windowHours: z.number().positive(),
+    }),
+    minCooldownAfterListSeconds: z.number().nonnegative(),
+    maxSelfVolumePct: z.number().min(0).max(1),
+    maxConcurrentSelfListedMarkets: z.number().int().positive(),
+    requireOracleSource: z.array(z.string()),
+    minSeedLiquidityUSD: z.number().nonnegative(),
+    maxSeedLiquidityUSD: z.number().positive(),
+  }).optional(),
+
   dependencies: z.object({
     attestation: z.enum(['strict', 'warn', 'disabled']),
     attestation_path: z.string(),

@@ -26,6 +26,7 @@ function makeConfig(overrides?: Partial<SecClawConfig>): SecClawConfig {
     telegram: { botToken: '', chatId: '' },
     pauseSignal: { enabled: false, port: 9999 },
     growthAgent: { auditLogPath: '', statePath: '' },
+    listing: { auditLogPath: '' },
     webhook: { url: '' },
     healthPort: 9090,
     healthToken: '',

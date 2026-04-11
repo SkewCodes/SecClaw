@@ -1,6 +1,7 @@
 import { createSecClawEvent } from '../events/schema.js';
 import { SecClawEventEmitter, secClawEventToAlert } from '../events/emitter.js';
 import { checkDependencyAttestation } from './dependency-attestor.js';
+import { checkListingCooldown } from './listing-cooldown.js';
 import type {
   GateRequest,
   GateResponse,
@@ -45,6 +46,10 @@ export async function gate(
     {
       name: 'dependency_attestor',
       run: (req, m) => checkDependencyAttestation(req, m),
+    },
+    {
+      name: 'listing_cooldown',
+      run: (req, m, ss) => checkListingCooldown(req, m, ss),
     },
   ];
 
@@ -121,5 +126,6 @@ export function createGateSharedState(): GateSharedState {
     activeCriticalAlerts: new Set(),
     activeModifications: new Map(),
     pendingModifications: new Map(),
+    recentListings: [],
   };
 }

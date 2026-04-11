@@ -5,6 +5,9 @@ import { checkCorrelatedStress } from './rules/correlated-stress.js';
 import { checkSessionLifecycle } from './rules/session-lifecycle.js';
 import { checkDirectionalCoherence } from './rules/directional-coherence.js';
 import { checkGrowthFeeConflict } from './rules/growth-fee-conflict.js';
+import { checkWashListing } from './rules/wash-listing.js';
+import { checkCooldownViolation } from './rules/cooldown-violation.js';
+import { checkGhostListing } from './rules/ghost-listing.js';
 
 const MAX_WINDOW = 10;
 
@@ -31,6 +34,9 @@ export class AuditCorrelator {
     alerts.push(...checkSessionLifecycle(snapshot, manifest));
     alerts.push(...checkDirectionalCoherence(snapshot));
     alerts.push(...checkGrowthFeeConflict(snapshot, manifest));
+    alerts.push(...checkWashListing(snapshot, manifest));
+    alerts.push(...checkCooldownViolation(snapshot, manifest));
+    alerts.push(...checkGhostListing(snapshot, manifest));
 
     return alerts;
   }

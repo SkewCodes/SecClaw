@@ -60,6 +60,9 @@ export function loadConfig(argv?: string[]): SecClawConfig {
       auditLogPath: env('GROWTH_AGENT_AUDIT_PATH', '~/.orderly/growth-agent/audit.jsonl').replace('~', process.env.HOME ?? process.env.USERPROFILE ?? '.'),
       statePath: env('GROWTH_AGENT_STATE_PATH', '~/.orderly/growth-agent/state.json').replace('~', process.env.HOME ?? process.env.USERPROFILE ?? '.'),
     },
+    listing: {
+      auditLogPath: env('LISTING_AUDIT_LOG_PATH', './listing-audit.jsonl'),
+    },
     webhook: {
       url: env('SECCLAW_WEBHOOK_URL'),
     },

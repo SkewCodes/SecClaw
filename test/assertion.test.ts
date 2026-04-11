@@ -96,6 +96,11 @@ function makeSnapshot(overrides?: {
         ...overrides?.growthAgent,
       },
     },
+    listing: {
+      ok: true,
+      latencyMs: 10,
+      data: { recentListings: [], recentTrades: [], auditLogSize: 0, previousAuditLogSize: 0 },
+    },
   };
 }
 

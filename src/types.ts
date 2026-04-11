@@ -276,6 +276,33 @@ export interface GrowthAgentSnapshot {
   previousAuditLogSize: number;
 }
 
+// ─── Listing Snapshot ────────────────────────────────────────
+
+export interface ListingEvent {
+  eventId: string;
+  agentId: string;
+  marketId: string;
+  baseAsset: string;
+  oracleSource: string;
+  seedLiquidityUSD: number;
+  timestamp: number;
+  liquidityPulledAt?: number;
+}
+
+export interface ListingTradeEvent {
+  agentId: string;
+  marketId: string;
+  volumeUSD: number;
+  timestamp: number;
+}
+
+export interface ListingSnapshot {
+  recentListings: ListingEvent[];
+  recentTrades: ListingTradeEvent[];
+  auditLogSize: number;
+  previousAuditLogSize: number;
+}
+
 // ─── Combined System Snapshot ─────────────────────────────────
 
 export interface SystemSnapshot {
@@ -285,6 +312,7 @@ export interface SystemSnapshot {
   guardian: ProbeResult<GuardianSnapshot>;
   otterclaw: ProbeResult<OtterClawSnapshot>;
   growthAgent: ProbeResult<GrowthAgentSnapshot>;
+  listing: ProbeResult<ListingSnapshot>;
 }
 
 // ─── Policy Manifest Types ────────────────────────────────────
@@ -391,6 +419,7 @@ export interface PolicyManifest {
     max_fee_changes_per_day: number;
     max_campaigns_per_day: number;
   };
+  listing?: ListingPolicy;
   dependencies?: DependencyPolicy;
   signer?: SignerPolicy;
   contracts?: Record<string, unknown>;
@@ -398,11 +427,29 @@ export interface PolicyManifest {
   mcp_tools?: Record<string, unknown>;
 }
 
+// ─── Listing Policy ─────────────────────────────────────────
+
+export interface ListingPolicy {
+  enabled: boolean;
+  allowedBaseAssets: string[];
+  deniedBaseAssets: string[];
+  maxMarketsPerWindow: {
+    count: number;
+    windowHours: number;
+  };
+  minCooldownAfterListSeconds: number;
+  maxSelfVolumePct: number;
+  maxConcurrentSelfListedMarkets: number;
+  requireOracleSource: string[];
+  minSeedLiquidityUSD: number;
+  maxSeedLiquidityUSD: number;
+}
+
 // ─── V2 Event Types ──────────────────────────────────────────
 
 export type SecClawEventModule =
   | 'yieldclaw_probe' | 'mm_probe' | 'guardian_probe'
-  | 'otterclaw_probe' | 'growth_probe'
+  | 'otterclaw_probe' | 'growth_probe' | 'listing_watchdog'
   | 'correlator' | 'drift_detector' | 'integrity_scanner'
   | 'dependency_attestor' | 'signer_health'
   | 'contract_verification' | 'mcp_tool_attestor'
@@ -620,6 +667,7 @@ export interface GateSharedState {
   activeCriticalAlerts: Set<string>;
   activeModifications: Map<string, ModificationRequest>;
   pendingModifications: Map<string, ModificationRequest>;
+  recentListings: ListingEvent[];
 }
 
 // ─── Config Types ─────────────────────────────────────────────
@@ -660,6 +708,9 @@ export interface SecClawConfig {
   growthAgent: {
     auditLogPath: string;
     statePath: string;
+  };
+  listing: {
+    auditLogPath: string;
   };
   webhook: {
     url: string;

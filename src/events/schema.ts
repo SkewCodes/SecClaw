@@ -10,7 +10,7 @@ import type {
 
 const SecClawEventModuleEnum = z.enum([
   'yieldclaw_probe', 'mm_probe', 'guardian_probe',
-  'otterclaw_probe', 'growth_probe',
+  'otterclaw_probe', 'growth_probe', 'listing_watchdog',
   'correlator', 'drift_detector', 'integrity_scanner',
   'dependency_attestor', 'signer_health',
   'contract_verification', 'mcp_tool_attestor',

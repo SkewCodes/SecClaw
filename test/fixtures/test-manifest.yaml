@@ -117,3 +117,19 @@ growth_agent:
   watchdog_enforcement_enabled: false
   max_fee_changes_per_day: 5
   max_campaigns_per_day: 3
+
+listing:
+  enabled: true
+  allowedBaseAssets: []
+  deniedBaseAssets: []
+  maxMarketsPerWindow:
+    count: 3
+    windowHours: 24
+  minCooldownAfterListSeconds: 300
+  maxSelfVolumePct: 0.4
+  maxConcurrentSelfListedMarkets: 5
+  requireOracleSource:
+    - "chainlink"
+    - "pyth"
+  minSeedLiquidityUSD: 1000
+  maxSeedLiquidityUSD: 50000
