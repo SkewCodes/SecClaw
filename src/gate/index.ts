@@ -2,6 +2,8 @@ import { createSecClawEvent } from '../events/schema.js';
 import { SecClawEventEmitter, secClawEventToAlert } from '../events/emitter.js';
 import { checkDependencyAttestation } from './dependency-attestor.js';
 import { checkListingCooldown } from './listing-cooldown.js';
+import { checkContractVerification } from './contract-verification.js';
+import { checkOracleTokenVerification } from './oracle-token-verifier.js';
 import type {
   GateRequest,
   GateResponse,
@@ -50,6 +52,14 @@ export async function gate(
     {
       name: 'listing_cooldown',
       run: (req, m, ss) => checkListingCooldown(req, m, ss),
+    },
+    {
+      name: 'contract_verification',
+      run: (req, m, ss) => checkContractVerification(req, m, ss),
+    },
+    {
+      name: 'oracle_token_verifier',
+      run: (req, m, ss) => checkOracleTokenVerification(req, m, ss),
     },
   ];
 

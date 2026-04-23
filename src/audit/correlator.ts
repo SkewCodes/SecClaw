@@ -9,6 +9,7 @@ import { checkWashListing } from './rules/wash-listing.js';
 import { checkCooldownViolation } from './rules/cooldown-violation.js';
 import { checkGhostListing } from './rules/ghost-listing.js';
 import { checkSupplyChainWorm } from './rules/supply-chain-worm.js';
+import { checkSkillCliBypass } from './rules/skill-cli-bypass.js';
 import { checkCredentialRadius } from './rules/credential-radius.js';
 import { WorkflowDriftDetector } from './rules/workflow-drift.js';
 
@@ -42,6 +43,7 @@ export class AuditCorrelator {
     alerts.push(...checkCooldownViolation(snapshot, manifest));
     alerts.push(...checkGhostListing(snapshot, manifest));
     alerts.push(...checkSupplyChainWorm(snapshot, manifest));
+    alerts.push(...checkSkillCliBypass(snapshot));
     alerts.push(...checkCredentialRadius(snapshot));
     alerts.push(...this.workflowDrift.check(snapshot));
 

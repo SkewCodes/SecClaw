@@ -19,6 +19,7 @@ const SecClawEventModuleEnum = z.enum([
   'workstation_probe', 'process_probe', 'network_probe', 'filesystem_probe',
   'github_probe',
   'credential_radius', 'workflow_drift',
+  'otterclaw_receiver',
   'deploy_pause', 'token_revoke', 'signer_rotate', 'quarantine_builder',
 ]);
 

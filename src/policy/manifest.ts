@@ -230,8 +230,35 @@ const ManifestSchema = z.object({
     }),
   }).optional(),
 
-  contracts: z.record(z.unknown()).optional(),
-  oracle: z.record(z.unknown()).optional(),
+  contracts: z.object({
+    mode: z.enum(['allowlist', 'disabled']),
+    simulation: z.enum(['disabled']),
+    allowed_interactions: z.array(z.object({
+      address: z.string(),
+      functions: z.array(z.object({
+        selector: z.string(),
+        params: z.record(z.object({
+          max: z.number().optional(),
+          min: z.number().optional(),
+        })).optional(),
+      })),
+    })),
+    blocked_addresses: z.array(z.string()),
+    unknown_contract_action: z.enum(['block', 'alert']),
+  }).optional(),
+
+  oracle: z.object({
+    min_sources: z.number().int().positive(),
+    max_deviation_pct: z.number().positive(),
+    cache_ttl_sec: z.number().positive(),
+    token_legitimacy: z.object({
+      min_liquidity_usd: z.number().nonnegative(),
+      min_age_hours: z.number().nonnegative(),
+      min_holders: z.number().int().nonnegative(),
+    }),
+    blocked_tokens: z.array(z.string()),
+  }).optional(),
+
   mcp_tools: z.record(z.unknown()).optional(),
 });
 

@@ -32,11 +32,13 @@ import { createHealthServer, type HealthState } from './health.js';
 import { fulfilled } from './utils.js';
 import { appendFileSync } from 'node:fs';
 import { SecClawEventEmitter, deriveV2LogPath } from './events/emitter.js';
+import { createOtterClawReceiver } from './events/otterclaw-receiver.js';
 import { gate as gateFunction, createGateSharedState, type GateContext } from './gate/index.js';
 import { checkSignerHealth, refreshSignerBalances } from './gate/signer-health.js';
 import type {
   SecClawConfig, SystemSnapshot, PolicyManifest,
   AlertSeverity, AlertHandler, GateRequest, GateResponse, GateSharedState,
+  OtterClawBridgeEvent,
 } from './types.js';
 
 const VERSION = '2.0.0';
@@ -143,6 +145,9 @@ async function main(): Promise<void> {
   const correlator = new AuditCorrelator();
   const escalator = new AlertEscalator();
 
+  const MAX_OTTERCLAW_EVENT_BUFFER = 100;
+  const otterclawEventBuffer: OtterClawBridgeEvent[] = [];
+
   const healthState: HealthState = {
     startedAt: Date.now(),
     lastTickAt: null,
@@ -202,7 +207,7 @@ async function main(): Promise<void> {
     bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe, listingProbe,
     workstationProbe, githubProbe, processProbe, networkProbe, filesystemProbe,
     driftDetector, correlator, escalator, digest, healthState,
-    manifest, config, gateSharedState,
+    manifest, config, gateSharedState, otterclawEventBuffer,
   });
 
   if (config.once) {
@@ -210,6 +215,42 @@ async function main(): Promise<void> {
     process.exit(hasAlerts ? 1 : 0);
   } else {
     const healthServer = createHealthServer(healthState, config.healthPort, config.healthToken || undefined);
+
+    let receiverServer: ReturnType<typeof createOtterClawReceiver> | null = null;
+    if (config.otterclawReceiver.secret) {
+      receiverServer = createOtterClawReceiver(
+        config.otterclawReceiver.port,
+        config.otterclawReceiver.secret,
+        (events) => {
+          for (const ev of events) {
+            otterclawEventBuffer.push(ev);
+          }
+          while (otterclawEventBuffer.length > MAX_OTTERCLAW_EVENT_BUFFER) {
+            otterclawEventBuffer.shift();
+          }
+          const bridgedAlerts = events
+            .filter((e) =>
+              e.type === 'skill.cli.blocked' ||
+              e.type === 'skill.capability.violation' ||
+              e.type === 'skill.install.blocked' ||
+              e.type === 'skill.sandbox.escape' ||
+              e.type === 'skill.network.blocked')
+            .map((e) => createAlert(
+              'otterclaw',
+              e.type.replace(/\./g, '_'),
+              e.severity === 'critical' ? 'critical' : e.severity === 'warning' ? 'high' : 'warning',
+              `OtterClaw: ${e.type} for skill ${e.skill_id}`,
+              { skill_id: e.skill_id, event_id: e.id, ...e.details },
+            ));
+          if (bridgedAlerts.length > 0) {
+            bus.emitAll(bridgedAlerts).catch((err) => {
+              console.error('[secclaw] Failed to emit OtterClaw bridged alerts:', (err as Error).message);
+            });
+          }
+        },
+      );
+      console.log(`[secclaw] OtterClaw receiver enabled on port ${config.otterclawReceiver.port}`);
+    }
 
     await doTick();
 
@@ -220,6 +261,7 @@ async function main(): Promise<void> {
       clearInterval(interval);
       digest.stop();
       healthServer.close();
+      if (receiverServer) receiverServer.close();
       if (stopWatching) stopWatching();
       process.exit(0);
     };
@@ -252,13 +294,14 @@ interface TickContext {
   manifest: PolicyManifest;
   config: SecClawConfig;
   gateSharedState: GateSharedState;
+  otterclawEventBuffer: OtterClawBridgeEvent[];
 }
 
 async function tick(ctx: TickContext): Promise<boolean> {
   const { bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe, listingProbe,
     workstationProbe, githubProbe, processProbe, networkProbe, filesystemProbe,
     driftDetector, correlator, escalator, digest, healthState,
-    manifest, config, gateSharedState } = ctx;
+    manifest, config, gateSharedState, otterclawEventBuffer } = ctx;
 
   const cycleStart = Date.now();
 
@@ -292,6 +335,9 @@ async function tick(ctx: TickContext): Promise<boolean> {
     process: fulfilled(procResult) ?? undefined,
     network: fulfilled(netResult) ?? undefined,
     filesystem: fulfilled(fsResult) ?? undefined,
+    otterclawEvents: otterclawEventBuffer.length > 0
+      ? otterclawEventBuffer.splice(0, otterclawEventBuffer.length)
+      : undefined,
   };
 
   if (config.verbose) {

@@ -243,6 +243,23 @@ export interface OtterClawSnapshot {
   skills: SkillFileInfo[];
 }
 
+// ─── OtterClaw Bridge Events (from OtterClaw SecClawBridge) ──
+
+export type OtterClawBridgeEventType =
+  | 'skill.cli.blocked' | 'skill.capability.violation'
+  | 'skill.exec.start' | 'skill.exec.end'
+  | 'skill.install.blocked' | 'skill.sandbox.escape'
+  | 'skill.network.blocked';
+
+export interface OtterClawBridgeEvent {
+  id: string;
+  type: OtterClawBridgeEventType;
+  skill_id: string;
+  timestamp: string;
+  severity: 'info' | 'warning' | 'critical';
+  details: Record<string, unknown>;
+}
+
 // ─── Growth Agent Snapshot ────────────────────────────────────
 
 export interface GrowthPlaybookRun {
@@ -384,6 +401,7 @@ export interface SystemSnapshot {
   process?: ProbeResult<ProcessSnapshot>;
   network?: ProbeResult<NetworkSnapshot>;
   filesystem?: ProbeResult<FilesystemSnapshot>;
+  otterclawEvents?: OtterClawBridgeEvent[];
 }
 
 // ─── Policy Manifest Types ────────────────────────────────────
@@ -494,8 +512,8 @@ export interface PolicyManifest {
   dependencies?: DependencyPolicy;
   signer?: SignerPolicy;
   supplyChain?: SupplyChainPolicy;
-  contracts?: Record<string, unknown>;
-  oracle?: Record<string, unknown>;
+  contracts?: ContractVerificationPolicy;
+  oracle?: OracleTokenPolicy;
   mcp_tools?: Record<string, unknown>;
 }
 
@@ -530,6 +548,7 @@ export type SecClawEventModule =
   | 'workstation_probe' | 'process_probe' | 'network_probe' | 'filesystem_probe'
   | 'github_probe'
   | 'credential_radius' | 'workflow_drift'
+  | 'otterclaw_receiver'
   | 'deploy_pause' | 'token_revoke' | 'signer_rotate' | 'quarantine_builder';
 
 export type SecClawEventAction = 'pass' | 'block' | 'alert' | 'escalate';
@@ -636,6 +655,69 @@ export interface SupplyChainPolicy {
   exfilDomainBlocklist: string[];
   trustedPublishers: string[];
   lockfileAttestation: SupplyChainLockfileAttestation;
+}
+
+// ─── Contract Verification Policy ───────────────────────────
+
+export interface ContractFunctionParam {
+  max?: number;
+  min?: number;
+}
+
+export interface ContractFunction {
+  selector: string;
+  params?: Record<string, ContractFunctionParam>;
+}
+
+export interface ContractInteraction {
+  address: string;
+  functions: ContractFunction[];
+}
+
+export interface ContractVerificationPolicy {
+  mode: 'allowlist' | 'disabled';
+  simulation: 'disabled';
+  allowed_interactions: ContractInteraction[];
+  blocked_addresses: string[];
+  unknown_contract_action: 'block' | 'alert';
+}
+
+// ─── Oracle / Token Verification Policy ─────────────────────
+
+export interface TokenLegitimacyPolicy {
+  min_liquidity_usd: number;
+  min_age_hours: number;
+  min_holders: number;
+}
+
+export interface OracleTokenPolicy {
+  min_sources: number;
+  max_deviation_pct: number;
+  cache_ttl_sec: number;
+  token_legitimacy: TokenLegitimacyPolicy;
+  blocked_tokens: string[];
+}
+
+// ─── Oracle Adapter Types ───────────────────────────────────
+
+export interface OraclePriceResult {
+  source: string;
+  price: number;
+  confidence: number;
+  timestamp: number;
+}
+
+export interface TokenMetadata {
+  address: string;
+  liquidity_usd: number;
+  age_hours: number;
+  holders: number;
+}
+
+export interface OracleAdapter {
+  name: string;
+  fetchPrice(token: string): Promise<OraclePriceResult>;
+  fetchTokenMetadata?(token: string): Promise<TokenMetadata>;
 }
 
 export interface SignerImmutablePolicy {
@@ -827,5 +909,9 @@ export interface SecClawConfig {
       githubToken: string;
       npmToken: string;
     };
+  };
+  otterclawReceiver: {
+    port: number;
+    secret: string;
   };
 }

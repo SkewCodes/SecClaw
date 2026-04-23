@@ -79,5 +79,9 @@ export function loadConfig(argv?: string[]): SecClawConfig {
         npmToken: env('SECCLAW_REVOKE_NPM_TOKEN'),
       },
     },
+    otterclawReceiver: {
+      port: envInt('SECCLAW_OTTERCLAW_RECEIVER_PORT', 9091),
+      secret: env('SECCLAW_OTTERCLAW_SECRET'),
+    },
   });
 }
