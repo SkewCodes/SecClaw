@@ -2,48 +2,168 @@
 
 Security, oversight, and integrity layer for autonomous trading agents on [Orderly Network](https://orderly.network).
 
-SecClaw is a watchdog daemon and pre-execution gate that continuously monitors five autonomous agents — YieldClaw, Orderly Agentic MM, the Orderly Agent Payment Layer (Guardian), OtterClaw, and the Orderly Growth Agent — enforcing policy limits, detecting cross-system risks, gating agent actions before execution, and alerting operators before problems escalate.
+SecClaw is a watchdog daemon, pre-execution gate, and supply chain defense system that continuously monitors six autonomous agents — YieldClaw, Orderly Agentic MM, the Orderly Agent Payment Layer (Guardian), OtterClaw, the Orderly Growth Agent, and the Listing Agent — enforcing policy limits, detecting cross-system risks, gating agent actions before execution, blocking malicious packages before they install, and alerting operators before problems escalate.
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        SecClaw v2 Process                                │
-│                                                                          │
-│  ┌────────────────────────── V1 Daemon ───────────────────────────────┐  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ │  │
-│  │  │ YieldClaw│ │ Agentic  │ │ Guardian │ │ OtterClaw│ │ Growth  │ │  │
-│  │  │  Probe   │ │ MM Probe │ │  Probe   │ │  Probe   │ │ Probe   │ │  │
-│  │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬────┘ │  │
-│  │       └──────┬──────┴──────┬─────┴──────┬──────┘            │      │  │
-│  │         Assertions   Drift   Correlator   Integrity         │      │  │
-│  └─────────────────────────────┬──────────────────────────────────────┘  │
-│                                │                                         │
-│                         Shared State                                     │
-│                         (critical alerts)                                │
-│                                │                                         │
-│  ┌──────────────────── V2 Gate ┴──────────────────────────────────────┐  │
-│  │  Agent ──▶ Gate Orchestrator ──▶ Dependency Attestor              │  │
-│  │                    │              ──▶ Signer Health               │  │
-│  │                    │              ──▶ (future: contracts, MCP)    │  │
-│  │                    ▼                                               │  │
-│  │              GateResponse (allow/block)                            │  │
-│  └────────────────────────────────────────────────────────────────────┘  │
-│                                │                                         │
-│  ┌────────────── V2 Event System ─────────────────────────────────────┐  │
-│  │  SecClawEvent (Zod schema) ──▶ V2 JSONL log                      │  │
-│  │                             ──▶ V1 AlertBus bridge (Telegram/WH)  │  │
-│  └────────────────────────────────────────────────────────────────────┘  │
-│                                                                          │
-│  ┌─────── Alert Pipeline ─────────────────────────────────────────────┐  │
-│  │  JSONL Logger │ Telegram │ Webhook │ Pause Signal │ 24h Digest    │  │
-│  └────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          SecClaw v2 Process                                │
+│                                                                            │
+│  ┌──────────────────────────── Daemon ──────────────────────────────────┐  │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌──────┐ ┌─────┐ │  │
+│  │  │YieldClaw│ │Agentic  │ │Guardian │ │OtterClaw│ │Growth│ │List-│ │  │
+│  │  │ Probe   │ │MM Probe │ │ Probe   │ │ Probe   │ │Probe │ │ ing │ │  │
+│  │  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └──┬───┘ └──┬──┘ │  │
+│  │       └─────┬─────┴─────┬─────┴─────┬─────┘         │        │    │  │
+│  │        Assertions  Drift  Correlator  Integrity       │        │    │  │
+│  └────────────────────────────┬──────────────────────────────────────┘  │
+│                               │                                         │
+│  ┌──── Supply Chain Telemetry ┴─────────────────────────────────────┐  │
+│  │  ┌───────────┐ ┌──────┐ ┌───────┐ ┌───────┐ ┌──────────┐       │  │
+│  │  │Workstation│ │GitHub│ │Process│ │Network│ │Filesystem│       │  │
+│  │  │  Probe    │ │Probe │ │Probe  │ │Probe  │ │  Probe   │       │  │
+│  │  └─────┬─────┘ └──┬───┘ └──┬────┘ └──┬────┘ └────┬─────┘       │  │
+│  │        └────┬──────┴────┬───┘         │           │             │  │
+│  │     Worm Correlator  Credential    Workflow                     │  │
+│  │     (Shai-Hulud)     Radius        Drift                        │  │
+│  └──────────────────────────┬───────────────────────────────────────┘  │
+│                              │                                         │
+│                       Shared State                                     │
+│                       (critical alerts)                                │
+│                              │                                         │
+│  ┌───────────────── V2 Gate ─┴──────────────────────────────────────┐  │
+│  │  Agent ──▶ Gate Orchestrator ──▶ Dependency Attestor            │  │
+│  │                    │              ──▶ Signer Health             │  │
+│  │                    │              ──▶ Listing Cooldown          │  │
+│  │                    ▼                                             │  │
+│  │              GateResponse (allow/block)                          │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                              │                                         │
+│  ┌─── Pre-Install Gate (CLI) ───────────────────────────────────────┐  │
+│  │  secclaw-preinstall ──▶ Hook Sandbox                            │  │
+│  │                       ──▶ Quarantine Window (npm registry)      │  │
+│  │                       ──▶ Behavioral Diff (exfil/cred scan)     │  │
+│  │                       ──▶ Lockfile Attestation                  │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                              │                                         │
+│  ┌──── Automated Response ──┴───────────────────────────────────────┐  │
+│  │  Deploy Pause │ Token Revoke │ Signer Rotate │ Builder Quarantine│  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                              │                                         │
+│  ┌─────── Alert Pipeline ───┴───────────────────────────────────────┐  │
+│  │  JSONL Logger │ Telegram │ Webhook │ Pause Signal │ 24h Digest  │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                              │                                         │
+│  ┌────────── V2 Event System ───────────────────────────────────────┐  │
+│  │  SecClawEvent (Zod schema) ──▶ V2 JSONL log                    │  │
+│  │                             ──▶ V1 AlertBus bridge (TG/WH)      │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Supply Chain Defense
+
+SecClaw includes a multi-layered supply chain defense system designed to block attacks like the [Bitwarden Shai-Hulud compromise](https://www.checkmarx.com/blog) before they reach builder workstations.
+
+### Pre-Install Gate (CLI)
+
+Run `npm run secclaw:preinstall` (or `npx secclaw-preinstall`) before `npm install` to enforce four synchronous checks:
+
+| Gate | What It Does |
+|------|-------------|
+| **Hook Sandbox** | Blocks packages with `preinstall`/`postinstall` lifecycle hooks unless explicitly allowlisted |
+| **Quarantine Window** | Blocks packages published within the last N hours (default 24h). Queries the npm registry for publish dates. Trusted publishers do **not** bypass quarantine |
+| **Behavioral Diff** | Static analysis of package source for exfil domains, sensitive path access (`~/.ssh`, `~/.aws`, `.env`, AI tool configs), and network call sites |
+| **Lockfile Attestation** | Verifies `package-lock.json` SHA-256 hash against a signed attestation. Detects tampering between `attest` and `install` |
+
+```bash
+# Generate lockfile attestation
+npm run secclaw:attest
+
+# Run pre-install gate (fetches publish dates from npm registry)
+npm run secclaw:preinstall
+
+# Run without registry lookups (offline mode)
+npm run secclaw:preinstall -- --skip-registry
+
+# Output as JSON
+npm run secclaw:preinstall -- --json
+```
+
+### Workstation Telemetry Probes
+
+Five probes run every tick in daemon mode, feeding the correlator with builder workstation signals:
+
+| Probe | Data Collected |
+|-------|---------------|
+| **WorkstationProbe** | Running processes, open ports, CLI tool versions (node, npm, bw, gh, git, docker) |
+| **GitHubProbe** | Workflow file hashes, webhook events (push, collaborator changes) |
+| **ProcessProbe** | Suspicious child processes (`curl \| bash`, `git push`, `npm publish`, etc.) |
+| **NetworkProbe** | Active TCP connections, outbound traffic to non-allowlisted domains |
+| **FilesystemProbe** | Changes to `~/.ssh`, `~/.aws`, `.env`, AI tool configs (`.claude`, `.cursor`, `.codex`, `.aider`) |
+
+Probe allowlists are updated automatically on manifest hot-reload.
+
+### Correlator Rules
+
+| Rule | Detection Pattern | Severity |
+|------|------------------|----------|
+| **SupplyChainWormRule** | Shai-Hulud pattern: exfil endpoint + credential read + git push + workflow injection (2+ indicators) | Critical |
+| **CredentialRadiusRule** | Suspicious process correlated with sensitive file access in the same snapshot | Critical |
+| **WorkflowDriftDetector** | New or modified workflow files, collaborator changes via GitHub webhooks | Critical |
+
+### Automated Response
+
+When a critical `supply-chain.*` alert fires, registered response modules act automatically:
+
+| Module | Action |
+|--------|--------|
+| **DeployPauseHandler** | Sends HTTP pause signal to halt deploy runners |
+| **TokenRevokeHandler** | Revokes GitHub PATs and npm tokens via their APIs |
+| **SignerRotateHandler** | Triggers ephemeral signer key rotation via configured endpoint |
+| **QuarantineBuilderHandler** | Isolates the compromised builder from the deploy pipeline |
+
+### Hardcoded Invariants
+
+These safety rules are not policy-configurable:
+
+- Trusted publisher status **never** bypasses quarantine or behavioral diff
+- Signature validity is **never** sufficient on its own
+- Critical `supply-chain.*` alerts **bypass** the 5-minute dedup cooldown
+- Supply chain alerts **skip** cycle-based severity escalation (they fire at final severity immediately)
+
+### Policy Configuration
+
+```yaml
+supplyChain:
+  quarantineWindowHours: 24
+  preinstallHookPolicy: blocklist       # blocklist | allowlist | sandbox
+  preinstallHookAllowlist: []
+  behavioralDiff:
+    enabled: true
+    newEndpointBlockThreshold: 1
+    sensitivePathBlocklist:
+      - "~/.ssh/**"
+      - "~/.aws/**"
+      - "**/.env"
+      - "~/.claude/**"
+      - "~/.cursor/**"
+      - "~/.codex/**"
+      - "~/.aider/**"
+  exfilDomainBlocklist:
+    - "audit.checkmarx.cx"
+  trustedPublishers:
+    - "@bitwarden"
+    - "@orderly-network"
+  lockfileAttestation:
+    required: true
+    algorithm: "sha256"
 ```
 
 ## V2 Gate
 
-V2 introduces a **synchronous gate function** that agents call before executing any action. The gate runs in the same process as the V1 daemon, sharing state (e.g., active critical alerts block policy loosening).
+V2 introduces a **synchronous gate function** that agents call before executing any action. The gate runs in the same process as the daemon, sharing state (e.g., active critical alerts block policy loosening).
 
 Agents import and call the gate directly — no HTTP server required:
 
@@ -104,7 +224,7 @@ Policy parameters are organized into enforcement tiers:
 
 The `--audit-mode` flag runs all gate checks but never blocks — events are emitted with `action: "alert"` instead of `"block"`. This allows gradual rollout: agents integrate the gate, observe what would be blocked, then enable enforcement.
 
-## What It Monitors (V1 Daemon)
+## What It Monitors (Daemon)
 
 | Agent | Data Source | Key Checks |
 |-------|-----------|------------|
@@ -113,6 +233,7 @@ The `--audit-mode` flag runs all gate checks but never blocks — events are emi
 | **Guardian** | Audit log (JSONL) | Policy bypass detection, spending limits, swap/vault enforcement, session TTL, audit log tampering |
 | **OtterClaw** | Filesystem scan | Skill hash integrity, frontmatter validation, injection/credential/shell pattern scanning, URL allowlist |
 | **Growth Agent** | Audit log + state file | Playbook allowlist, fee change bounds, campaign limits, watchdog enforcement, builder tier floor |
+| **Listing Agent** | Audit log | Self-listing cooldowns, max markets per window, seed liquidity bounds, oracle source requirements, wash trading detection |
 
 ### Cross-System Correlation Rules
 
@@ -124,6 +245,11 @@ The `--audit-mode` flag runs all gate checks but never blocks — events are emi
 - **Growth/Fee Conflict** — Fee cuts compressing MM spreads, campaigns during circuit breaker events
 - **Session Lifecycle** — Rapid intent creation, excessive denials, TTL violations
 - **Flagged Account Leakage** — Watchdog-flagged accounts still trading via Guardian
+- **Wash Listing** — Self-trading patterns on newly listed markets
+- **Ghost Listing** — Markets listed without oracle backing
+- **Supply Chain Worm** — Shai-Hulud multi-stage propagation pattern
+- **Credential Radius** — Suspicious processes correlated with credential file access
+- **Workflow Drift** — Unauthorized changes to GitHub Actions workflows
 
 ### On-Chain Verification
 
@@ -137,6 +263,9 @@ npm install
 
 # Generate dependency attestation manifest
 npm run secclaw:attest
+
+# Run pre-install supply chain gate
+npm run secclaw:preinstall
 
 # Run single check
 npm run check -- --config ./policy-manifest.yaml --verbose
@@ -186,6 +315,7 @@ SecClaw is configured through a combination of **CLI flags**, **environment vari
 | `OTTERCLAW_SKILLS_PATH` | Path to OtterClaw skills directory | `../OtterClaw/skills` |
 | `GROWTH_AGENT_AUDIT_PATH` | Path to Growth Agent audit JSONL | `~/.orderly/growth-agent/audit.jsonl` |
 | `GROWTH_AGENT_STATE_PATH` | Path to Growth Agent state JSON | `~/.orderly/growth-agent/state.json` |
+| `LISTING_AUDIT_LOG_PATH` | Path to Listing Agent audit JSONL | `./listing-audit.jsonl` |
 | `SECCLAW_TG_BOT_TOKEN` | Telegram bot token for alerts | |
 | `SECCLAW_TG_CHAT_ID` | Telegram chat ID for alerts | |
 | `SECCLAW_WEBHOOK_URL` | Generic webhook URL for alerts | |
@@ -195,41 +325,16 @@ SecClaw is configured through a combination of **CLI flags**, **environment vari
 | `SECCLAW_VAULT_CONTRACT` | Vault contract address for on-chain verification | |
 | `SECCLAW_RPC_URL` | Arbitrum RPC URL for on-chain reads + balance refresh | |
 | `SECCLAW_VAULT_DECIMALS` | Token decimals for on-chain math | `6` |
+| `SECCLAW_GITHUB_TOKEN` | GitHub PAT for workflow file monitoring | |
+| `SECCLAW_GITHUB_REPOS` | Comma-separated list of `owner/repo` to monitor | |
+| `SECCLAW_DEPLOY_RUNNER_PORT` | Port for deploy runner pause signal | |
+| `SECCLAW_SIGNER_ROTATE_ENDPOINT` | URL to trigger signer key rotation | |
+| `SECCLAW_REVOKE_GITHUB_TOKEN` | GitHub token to revoke on compromise | |
+| `SECCLAW_REVOKE_NPM_TOKEN` | npm token to revoke on compromise | |
 
 ### Policy Manifest
 
-The `policy-manifest.yaml` defines every limit, allowlist, and threshold. It is Zod-validated on load and supports **hot-reload** — edit the file while the daemon is running and changes take effect on the next cycle.
-
-V2 adds optional sections for the gate (backward-compatible with v1.0 manifests):
-
-```yaml
-# V2 sections (all optional — V1 manifests load unchanged)
-dependencies:
-  attestation: strict          # strict | warn | disabled
-  attestation_path: ./.secclaw/attestation.json
-  blocked_packages: []
-  drift_action: block          # block | alert
-
-signer:
-  immutable:
-    cumulative_exposure_ceiling_usd: 100000
-    balance_minimum_eth: 0.01
-    nonce_mode: strict
-    rate_limits_ceiling: { per_minute: 50, per_day: 2000 }
-    min_cooldown_ms: 100
-    gas_ceiling_gwei: 500
-    modification_delay_sec: 300
-    critical_alert_lock: true
-  rate_limits: { per_minute: 10, per_hour: 100, per_day: 500 }
-  cooldown_ms: 500
-  cumulative_exposure:
-    window: 1h
-    max_usd: 50000
-    delay_override_sec: 600    # longer delay for loosening this parameter
-  gas: { max_price_gwei: 100, max_limit: 500000 }
-  acceleration_detection: true
-  target_switch_detection: true
-```
+The `policy-manifest.yaml` defines every limit, allowlist, and threshold. It is Zod-validated on load and supports **hot-reload** — edit the file while the daemon is running and changes take effect on the next cycle. Supply chain probe allowlists (network domains, filesystem paths) are also updated on reload.
 
 See [`policy-manifest.yaml`](./policy-manifest.yaml) for the full schema with testnet defaults.
 
@@ -252,16 +357,17 @@ curl -H "Authorization: Bearer $SECCLAW_HEALTH_TOKEN" http://localhost:9090/stat
 
 ## Alert Pipeline
 
-1. **Dedup** — Same source/check/severity/discriminator suppressed for 5 minutes
-2. **Escalation** — Alerts persisting 6+ consecutive cycles are promoted one severity level
+1. **Dedup** — Same source/check/severity/discriminator suppressed for 5 minutes. Critical `supply-chain.*` alerts **bypass** dedup entirely
+2. **Escalation** — Alerts persisting 6+ consecutive cycles are promoted one severity level. Supply chain alerts **skip** escalation (they fire at final severity immediately)
 3. **Routing** — Alerts dispatched in parallel to all registered handlers:
    - **JSONL Logger** — Append-only local audit log (V1 format)
    - **V2 JSONL Logger** — Parallel stream with structured `SecClawEvent` schema for downstream consumption
-   - **Telegram** — Rate-limited (3s interval), severity-filtered, emoji-coded
+   - **Telegram** — Rate-limited (3s interval), severity-filtered, emoji-coded, with per-builder topic routing for supply chain alerts
    - **Webhook** — JSON POST to any URL, rate-limited (1s interval)
    - **Pause Signal** — Critical-only HTTP POST to agent pause endpoints
-4. **V1/V2 Bridge** — Gate block events are converted to V1 alerts and routed through Telegram/Webhook/Pause Signal
-5. **Digest** — Every 24h, a Markdown summary with health grade (A–F) is written to disk and pushed through Telegram/Webhook
+4. **Automated Response** — Critical supply chain alerts trigger deploy pause, token revocation, signer rotation, and builder quarantine
+5. **V1/V2 Bridge** — Gate block events are converted to V1 alerts and routed through Telegram/Webhook/Pause Signal
+6. **Digest** — Every 24h, a Markdown summary with health grade (A-F) is written to disk and pushed through Telegram/Webhook
 
 ## V2 Event System
 
@@ -274,7 +380,7 @@ interface SecClawEvent {
   timestamp: string;          // ISO 8601
   source: "daemon" | "gate";
   agent_id: string;
-  module: string;             // e.g. "signer_health", "dependency_attestor"
+  module: string;             // e.g. "signer_health", "supply_chain_worm"
   action: "pass" | "block" | "alert" | "escalate";
   severity: "info" | "warning" | "critical";
   check: string;
@@ -311,6 +417,8 @@ docker run -d \
   -e SECCLAW_TG_BOT_TOKEN=... \
   -e SECCLAW_TG_CHAT_ID=... \
   -e SECCLAW_RPC_URL=https://arb1.arbitrum.io/rpc \
+  -e SECCLAW_GITHUB_TOKEN=ghp_... \
+  -e SECCLAW_GITHUB_REPOS=SkewCodes/SecClaw,SkewCodes/OtterClaw \
   -p 9090:9090 \
   secclaw
 ```
@@ -321,16 +429,31 @@ The Dockerfile includes a built-in `HEALTHCHECK` instruction.
 
 ```
 src/
-├── daemon.ts              # Entry point, tick loop, orchestration, gate wiring
+├── daemon.ts              # Entry point, tick loop, orchestration, probe/response wiring
 ├── config.ts              # CLI + env var configuration (incl. --audit-mode)
-├── types.ts               # All TypeScript interfaces (V1 + V2)
+├── types.ts               # All TypeScript interfaces (V1 + V2 + supply chain)
 ├── utils.ts               # Shared helpers
 ├── health.ts              # HTTP health/status server
-├── gate/                  # V2 Gate (new)
+├── gate/                  # V2 Gate
 │   ├── index.ts           # Gate orchestrator (audit-mode, module sequencing)
-│   ├── dependency-attestor.ts  # Build-time + runtime attestation
+│   ├── dependency-attestor.ts  # Build-time + runtime hash attestation
+│   ├── listing-cooldown.ts     # Listing gate cooldown enforcement
 │   └── signer-health.ts  # Nonce, balance, gas, rate limit, exposure, mods
-├── events/                # V2 Event System (new)
+├── supply-chain/          # Pre-install supply chain gates
+│   ├── dependency-attestor.ts  # Quarantine window, behavioral diff, exfil scan
+│   ├── hook-sandbox.ts    # Lifecycle hook policy enforcement
+│   ├── binary-verifier.ts # Tier 3 stub: CLI binary integrity
+│   └── mcp-tool-attestor.ts   # Tier 3 stub: MCP tool attestation
+├── cli/
+│   └── preinstall.ts      # CLI entry point for pre-install gate
+├── hardening/
+│   └── lockfile-attestation.ts  # SHA-256 lockfile generate + verify
+├── response/              # Automated response modules
+│   ├── deploy-pause.ts    # Halt deploy runners on critical alerts
+│   ├── token-revoke.ts    # Revoke GitHub/npm tokens via API
+│   ├── signer-rotate.ts   # Trigger ephemeral signer key rotation
+│   └── quarantine-builder.ts   # Isolate compromised builders
+├── events/                # V2 Event System
 │   ├── schema.ts          # SecClawEvent Zod schema + factory
 │   └── emitter.ts         # V2 JSONL writer + V1 AlertBus bridge
 ├── probes/
@@ -338,9 +461,16 @@ src/
 │   ├── mm.ts              # CLI + HTTP dual-mode probe
 │   ├── payment-layer.ts   # Incremental JSONL reader
 │   ├── otterclaw.ts       # Filesystem skill scanner
-│   └── growth-agent.ts    # Incremental JSONL + state reader
+│   ├── growth-agent.ts    # Incremental JSONL + state reader
+│   ├── listing.ts         # Listing audit log reader
+│   ├── process-list.ts    # Shared OS process enumeration
+│   ├── workstation.ts     # Builder workstation telemetry
+│   ├── github.ts          # GitHub webhook + workflow monitor
+│   ├── process.ts         # Suspicious process detector
+│   ├── network.ts         # Outbound connection monitor
+│   └── filesystem.ts      # Sensitive path change detector
 ├── policy/
-│   ├── manifest.ts        # Zod-validated YAML loader + hot-reload (V2 extended)
+│   ├── manifest.ts        # Zod-validated YAML loader + hot-reload
 │   ├── assertion.ts       # Per-system policy checks
 │   └── drift-detector.ts  # Time-series trend analysis
 ├── audit/
@@ -351,16 +481,22 @@ src/
 │       ├── correlated-stress.ts
 │       ├── directional-coherence.ts
 │       ├── session-lifecycle.ts
-│       └── growth-fee-conflict.ts
+│       ├── growth-fee-conflict.ts
+│       ├── cooldown-violation.ts
+│       ├── ghost-listing.ts
+│       ├── wash-listing.ts
+│       ├── supply-chain-worm.ts    # Shai-Hulud worm pattern detector
+│       ├── credential-radius.ts    # Credential theft correlator
+│       └── workflow-drift.ts       # GitHub workflow integrity monitor
 ├── integrity/
 │   ├── skill-scanner.ts   # Injection/credential/shell pattern detection
 │   ├── schema-validator.ts # Skill frontmatter validation
 │   └── onchain-verifier.ts # On-chain contract reads via viem
 ├── alerts/
-│   ├── bus.ts             # Dedup + parallel dispatch
-│   ├── escalation.ts      # Persistence-based severity promotion
+│   ├── bus.ts             # Dedup + parallel dispatch (supply-chain bypass)
+│   ├── escalation.ts      # Persistence-based severity promotion (supply-chain skip)
 │   ├── logger.ts          # JSONL append-only logger
-│   ├── telegram.ts        # Telegram bot handler
+│   ├── telegram.ts        # Telegram bot handler (per-builder topic routing)
 │   ├── webhook.ts         # Generic webhook handler
 │   └── pause-signal.ts    # Critical-only pause broadcaster
 └── reports/
@@ -369,19 +505,27 @@ src/
 scripts/
 └── attest.ts              # Build-time dependency attestation (npm run secclaw:attest)
 
+test/
+├── *.test.ts              # 26 test files, 299 tests
+├── integration/
+│   └── supply-chain-e2e.test.ts  # Full Shai-Hulud attack simulation
+└── fixtures/
+    └── supply-chain/      # Malicious + safe package fixtures
+
 .secclaw/                  # Runtime artifacts (gitignored)
 ├── attestation.json       # Dependency attestation manifest
+├── lockfile-attest.json   # Lockfile attestation record
 └── nonce-state.json       # Persisted nonce tracker
 ```
 
 ## Testing
 
 ```bash
-npm test              # Run all 166 tests
+npm test              # Run all 299 tests
 npm run test:watch    # Watch mode
 ```
 
-Tests cover V1 assertions, correlation rules, drift detection, alert bus dedup/escalation, health server auth, probe incremental reading, on-chain verifier logic, V2 event schema/emitter, gate orchestrator, dependency attestor (build + runtime), signer health (all checks), rate limiter atomicity, balance enforcement, exposure window pruning, acceleration detection, Tier 2 modification lifecycle with delay propagation, and full daemon+gate integration.
+Tests cover V1 assertions, correlation rules (including Shai-Hulud worm, credential radius, workflow drift), drift detection, alert bus dedup/escalation (with supply chain bypass verification), health server, probe incremental reading, on-chain verifier logic, V2 event schema/emitter, gate orchestrator, dependency attestor (build + runtime + pre-install), signer health (all checks), rate limiter atomicity, balance enforcement, exposure window pruning, acceleration detection, Tier 2 modification lifecycle with delay propagation, hook sandbox policy enforcement, lockfile attestation (generate + verify + tamper detection), automated response modules (deploy pause, token revoke, signer rotate, builder quarantine), pre-install CLI gate logic, listing gate/cooldown, and a full end-to-end Bitwarden Shai-Hulud attack simulation.
 
 ## License
 
