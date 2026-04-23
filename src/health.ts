@@ -84,7 +84,7 @@ function handleHealth(state: HealthState, res: ServerResponse): void {
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     status: healthy ? 'healthy' : 'unhealthy',
-    version: '1.3.0',
+    version: '2.0.0',
     uptime_ms: uptimeMs,
     tick_count: state.tickCount,
     last_tick_at: state.lastTickAt ? new Date(state.lastTickAt).toISOString() : null,

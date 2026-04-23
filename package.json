@@ -4,6 +4,9 @@
   "description": "Security, oversight, and integrity layer for autonomous trading agents on Orderly Network",
   "type": "module",
   "main": "dist/daemon.js",
+  "bin": {
+    "secclaw-preinstall": "dist/cli/preinstall.js"
+  },
   "scripts": {
     "start": "tsx src/daemon.ts",
     "check": "tsx src/daemon.ts --once",
@@ -12,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
-    "secclaw:attest": "tsx scripts/attest.ts"
+    "secclaw:attest": "tsx scripts/attest.ts",
+    "secclaw:preinstall": "tsx src/cli/preinstall.ts"
   },
   "dependencies": {
     "commander": "^12.1.0",

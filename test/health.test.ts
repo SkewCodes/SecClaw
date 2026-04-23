@@ -44,7 +44,7 @@ describe('Health Server', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe('healthy');
-    expect(body.version).toBe('1.3.0');
+    expect(body.version).toBe('2.0.0');
     expect(body.tick_count).toBe(10);
     expect(body.stale).toBe(false);
   });

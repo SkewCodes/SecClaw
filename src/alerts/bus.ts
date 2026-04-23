@@ -12,16 +12,21 @@ export class AlertBus {
   }
 
   async emit(alert: Alert): Promise<void> {
-    const key = dedupKey(alert);
-    const now = Date.now();
-    const lastEmitted = this.recentAlerts.get(key);
+    const bypassDedup = alert.severity === 'critical'
+      && alert.source.startsWith('supply-chain');
 
-    if (lastEmitted && now - lastEmitted < DEDUP_COOLDOWN_MS) {
-      return;
+    if (!bypassDedup) {
+      const key = dedupKey(alert);
+      const now = Date.now();
+      const lastEmitted = this.recentAlerts.get(key);
+
+      if (lastEmitted && now - lastEmitted < DEDUP_COOLDOWN_MS) {
+        return;
+      }
+
+      this.recentAlerts.set(key, now);
+      this.pruneOldEntries(now);
     }
-
-    this.recentAlerts.set(key, now);
-    this.pruneOldEntries(now);
 
     await Promise.allSettled(
       this.handlers.map((h) => h.handle(alert)),

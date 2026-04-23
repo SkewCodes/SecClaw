@@ -1,0 +1,9 @@
+{
+  "name": "hook-pkg",
+  "version": "1.0.0",
+  "description": "Package with lifecycle hooks for testing hook sandbox",
+  "scripts": {
+    "preinstall": "echo preinstall",
+    "postinstall": "node setup.js"
+  }
+}

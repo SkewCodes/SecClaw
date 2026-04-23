@@ -21,12 +21,18 @@ export class TelegramHandler implements AlertHandler {
   private lastSentAt = 0;
   private queue: Alert[] = [];
   private drainPromise: Promise<void> | null = null;
+  private builderTopicIds = new Map<string, number>();
 
   constructor(
     private botToken: string,
     private chatId: string,
     private minSeverity: AlertSeverity = 'warning',
+    private supplyChainTopicId?: number,
   ) {}
+
+  setBuilderTopicId(builderId: string, topicId: number): void {
+    this.builderTopicIds.set(builderId, topicId);
+  }
 
   async handle(alert: Alert): Promise<void> {
     if (!this.shouldSend(alert.severity)) return;
@@ -80,15 +86,28 @@ export class TelegramHandler implements AlertHandler {
       text = text.slice(0, MAX_MESSAGE_LENGTH - 3) + '...';
     }
 
+    let messageThreadId: number | undefined;
+    if (alert.source.startsWith('supply-chain')) {
+      const builderId = alert.data?.['builderId'] as string | undefined;
+      if (builderId) {
+        messageThreadId = this.builderTopicIds.get(builderId);
+      }
+      messageThreadId ??= this.supplyChainTopicId;
+    }
+
     try {
       const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
+      const payload: Record<string, unknown> = {
+        chat_id: this.chatId,
+        text,
+      };
+      if (messageThreadId) {
+        payload.message_thread_id = messageThreadId;
+      }
       await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: this.chatId,
-          text,
-        }),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(10_000),
       });
     } catch (err) {

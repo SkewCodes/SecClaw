@@ -15,6 +15,11 @@ const SecClawEventModuleEnum = z.enum([
   'dependency_attestor', 'signer_health',
   'contract_verification', 'mcp_tool_attestor',
   'oracle_token_verifier',
+  'supply_chain_worm', 'hook_sandbox', 'lockfile_attestation',
+  'workstation_probe', 'process_probe', 'network_probe', 'filesystem_probe',
+  'github_probe',
+  'credential_radius', 'workflow_drift',
+  'deploy_pause', 'token_revoke', 'signer_rotate', 'quarantine_builder',
 ]);
 
 const SecClawEventActionEnum = z.enum(['pass', 'block', 'alert', 'escalate']);

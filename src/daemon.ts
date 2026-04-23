@@ -12,6 +12,15 @@ import { PaymentLayerProbe } from './probes/payment-layer.js';
 import { OtterClawProbe } from './probes/otterclaw.js';
 import { GrowthAgentProbe } from './probes/growth-agent.js';
 import { ListingProbe } from './probes/listing.js';
+import { WorkstationProbe } from './probes/workstation.js';
+import { GitHubProbe } from './probes/github.js';
+import { ProcessProbe } from './probes/process.js';
+import { NetworkProbe } from './probes/network.js';
+import { FilesystemProbe } from './probes/filesystem.js';
+import { DeployPauseHandler } from './response/deploy-pause.js';
+import { TokenRevokeHandler } from './response/token-revoke.js';
+import { SignerRotateHandler } from './response/signer-rotate.js';
+import { QuarantineBuilderHandler } from './response/quarantine-builder.js';
 import { runAssertions } from './policy/assertion.js';
 import { DriftDetector } from './policy/drift-detector.js';
 import { AuditCorrelator } from './audit/correlator.js';
@@ -40,6 +49,11 @@ async function main(): Promise<void> {
   console.log(`[secclaw] Network: ${manifest.global.network}`);
   console.log(`[secclaw] Poll interval: ${config.pollIntervalSec}s`);
   console.log(`[secclaw] Mode: ${config.once ? 'single check' : 'daemon'}${config.dryRun ? ' (dry-run)' : ''}${config.auditMode ? ' (audit-mode)' : ''}`);
+
+  if (manifest.supplyChain) {
+    console.log(`[secclaw] Supply chain defense: quarantine=${manifest.supplyChain.quarantineWindowHours}h, hooks=${manifest.supplyChain.preinstallHookPolicy}, behavioral_diff=${manifest.supplyChain.behavioralDiff.enabled}`);
+    console.log(`[secclaw] Lockfile attestation: required=${manifest.supplyChain.lockfileAttestation.required}, algorithm=${manifest.supplyChain.lockfileAttestation.algorithm}`);
+  }
 
   const bus = new AlertBus();
 
@@ -70,12 +84,60 @@ async function main(): Promise<void> {
     console.log('[secclaw] Webhook alerts enabled');
   }
 
+  if (!config.dryRun && config.pauseSignal.enabled) {
+    const deployPause = new DeployPauseHandler(
+      config.pauseSignal.port,
+      config.supplyChain.deployRunnerPort || undefined,
+    );
+    bus.register(deployPause);
+    console.log('[secclaw] Deploy pause response enabled');
+  }
+
+  if (!config.dryRun && (config.supplyChain.tokenRevoke.githubToken || config.supplyChain.tokenRevoke.npmToken)) {
+    const tokenRevoke = new TokenRevokeHandler({
+      githubToken: config.supplyChain.tokenRevoke.githubToken || undefined,
+      npmToken: config.supplyChain.tokenRevoke.npmToken || undefined,
+    });
+    bus.register(tokenRevoke);
+    console.log('[secclaw] Token revoke response enabled');
+  }
+
+  if (!config.dryRun && config.supplyChain.signerRotateEndpoint) {
+    const signerRotate = new SignerRotateHandler({
+      rotationEndpoint: config.supplyChain.signerRotateEndpoint,
+    });
+    bus.register(signerRotate);
+    console.log('[secclaw] Signer rotate response enabled');
+  }
+
+  if (!config.dryRun && config.pauseSignal.enabled) {
+    const quarantine = new QuarantineBuilderHandler({
+      pausePort: config.pauseSignal.port,
+    });
+    bus.register(quarantine);
+    console.log('[secclaw] Builder quarantine response enabled');
+  }
+
   const ycProbe = new YieldClawProbe(config.yieldclaw.baseUrl, config.yieldclaw.healthToken);
   const mmProbe = new MMProbe(config.mm.accountId, config.mm.network, config.mm.statusUrl || undefined);
   const guardianProbe = new PaymentLayerProbe(config.guardian.auditLogPath);
   const ocProbe = new OtterClawProbe([config.otterclaw.skillsPath, config.otterclaw.partnerSkillsPath]);
   const gaProbe = new GrowthAgentProbe(config.growthAgent.auditLogPath, config.growthAgent.statePath);
   const listingProbe = new ListingProbe(config.listing.auditLogPath);
+
+  const workstationProbe = new WorkstationProbe();
+  const githubProbe = new GitHubProbe(
+    'https://api.github.com',
+    config.supplyChain.githubToken || undefined,
+    config.supplyChain.githubRepos,
+  );
+  const processProbe = new ProcessProbe();
+  const networkProbe = new NetworkProbe(
+    manifest.supplyChain?.exfilDomainBlocklist ?? [],
+  );
+  const filesystemProbe = new FilesystemProbe(
+    manifest.supplyChain?.behavioralDiff.sensitivePathBlocklist,
+  );
 
   const driftDetector = new DriftDetector();
   const correlator = new AuditCorrelator();
@@ -112,6 +174,10 @@ async function main(): Promise<void> {
       (newManifest) => {
         manifest = newManifest;
         gateCtx.manifest = newManifest;
+        if (newManifest.supplyChain) {
+          networkProbe.setAllowlist(newManifest.supplyChain.exfilDomainBlocklist);
+          filesystemProbe.updatePaths(newManifest.supplyChain.behavioralDiff.sensitivePathBlocklist);
+        }
         console.log('[secclaw] Policy manifest reloaded');
       },
       (err) => {
@@ -134,6 +200,7 @@ async function main(): Promise<void> {
 
   const doTick = () => tick({
     bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe, listingProbe,
+    workstationProbe, githubProbe, processProbe, networkProbe, filesystemProbe,
     driftDetector, correlator, escalator, digest, healthState,
     manifest, config, gateSharedState,
   });
@@ -172,6 +239,11 @@ interface TickContext {
   ocProbe: OtterClawProbe;
   gaProbe: GrowthAgentProbe;
   listingProbe: ListingProbe;
+  workstationProbe: WorkstationProbe;
+  githubProbe: GitHubProbe;
+  processProbe: ProcessProbe;
+  networkProbe: NetworkProbe;
+  filesystemProbe: FilesystemProbe;
   driftDetector: DriftDetector;
   correlator: AuditCorrelator;
   escalator: AlertEscalator;
@@ -184,6 +256,7 @@ interface TickContext {
 
 async function tick(ctx: TickContext): Promise<boolean> {
   const { bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe, listingProbe,
+    workstationProbe, githubProbe, processProbe, networkProbe, filesystemProbe,
     driftDetector, correlator, escalator, digest, healthState,
     manifest, config, gateSharedState } = ctx;
 
@@ -191,13 +264,19 @@ async function tick(ctx: TickContext): Promise<boolean> {
 
   if (config.verbose) console.log(`[secclaw] Tick starting at ${new Date().toISOString()}`);
 
-  const [ycResult, mmResult, guardianResult, ocResult, gaResult, listingResult] = await Promise.allSettled([
+  const [ycResult, mmResult, guardianResult, ocResult, gaResult, listingResult,
+    wsResult, ghResult, procResult, netResult, fsResult] = await Promise.allSettled([
     ycProbe.probe(),
     mmProbe.probe(),
     guardianProbe.probe(),
     ocProbe.probe(),
     gaProbe.probe(),
     listingProbe.probe(),
+    workstationProbe.probe(),
+    githubProbe.probe(),
+    processProbe.probe(),
+    networkProbe.probe(),
+    filesystemProbe.probe(),
   ]);
 
   const snapshot: SystemSnapshot = {
@@ -208,6 +287,11 @@ async function tick(ctx: TickContext): Promise<boolean> {
     otterclaw: fulfilled(ocResult) ?? { ok: false, error: 'Probe failed', latencyMs: 0 },
     growthAgent: fulfilled(gaResult) ?? { ok: false, error: 'Probe failed', latencyMs: 0 },
     listing: fulfilled(listingResult) ?? { ok: false, error: 'Probe failed', latencyMs: 0 },
+    workstation: fulfilled(wsResult) ?? undefined,
+    github: fulfilled(ghResult) ?? undefined,
+    process: fulfilled(procResult) ?? undefined,
+    network: fulfilled(netResult) ?? undefined,
+    filesystem: fulfilled(fsResult) ?? undefined,
   };
 
   if (config.verbose) {
@@ -305,6 +389,23 @@ function checkProbeFailures(snapshot: SystemSnapshot) {
       alerts.push(createAlert(p.name, 'probe_failure', 'high',
         `Probe failed: ${p.result.error ?? 'unknown error'} — system is unmonitored`,
         { error: p.result.error, latencyMs: p.result.latencyMs },
+      ));
+    }
+  }
+
+  const scProbes = [
+    { name: 'workstation', result: snapshot.workstation },
+    { name: 'github', result: snapshot.github },
+    { name: 'process', result: snapshot.process },
+    { name: 'network', result: snapshot.network },
+    { name: 'filesystem', result: snapshot.filesystem },
+  ] as const;
+
+  for (const p of scProbes) {
+    if (p.result && !p.result.ok) {
+      alerts.push(createAlert(`supply-chain`, 'probe_failure', 'high',
+        `Supply chain probe ${p.name} failed: ${p.result.error ?? 'unknown error'}`,
+        { probe: p.name, error: p.result.error, latencyMs: p.result.latencyMs },
       ));
     }
   }

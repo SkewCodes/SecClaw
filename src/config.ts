@@ -69,5 +69,15 @@ export function loadConfig(argv?: string[]): SecClawConfig {
     healthPort: envInt('SECCLAW_HEALTH_PORT', 9090),
     healthToken: env('SECCLAW_HEALTH_TOKEN'),
     vaultDecimals: envInt('SECCLAW_VAULT_DECIMALS', 6),
+    supplyChain: {
+      githubToken: env('SECCLAW_GITHUB_TOKEN'),
+      githubRepos: env('SECCLAW_GITHUB_REPOS').split(',').filter(Boolean),
+      deployRunnerPort: envInt('SECCLAW_DEPLOY_RUNNER_PORT', 0),
+      signerRotateEndpoint: env('SECCLAW_SIGNER_ROTATE_ENDPOINT'),
+      tokenRevoke: {
+        githubToken: env('SECCLAW_REVOKE_GITHUB_TOKEN'),
+        npmToken: env('SECCLAW_REVOKE_NPM_TOKEN'),
+      },
+    },
   });
 }

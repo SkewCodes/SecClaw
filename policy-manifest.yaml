@@ -119,6 +119,31 @@ growth_agent:
   max_fee_changes_per_day: 5
   max_campaigns_per_day: 3
 
+supplyChain:
+  quarantineWindowHours: 24
+  preinstallHookPolicy: blocklist
+  preinstallHookAllowlist: []
+  behavioralDiff:
+    enabled: true
+    newEndpointBlockThreshold: 1
+    sensitivePathBlocklist:
+      - "~/.ssh/**"
+      - "~/.aws/**"
+      - "**/.env"
+      - "**/.env.*"
+      - "~/.claude/**"
+      - "~/.cursor/**"
+      - "~/.codex/**"
+      - "~/.aider/**"
+  exfilDomainBlocklist:
+    - "audit.checkmarx.cx"
+  trustedPublishers:
+    - "@bitwarden"
+    - "@orderly-network"
+  lockfileAttestation:
+    required: true
+    algorithm: "sha256"
+
 listing:
   enabled: true
   allowedBaseAssets: []

@@ -29,6 +29,10 @@ export class AlertEscalator {
     const seenKeys = new Set<string>();
 
     for (const alert of alerts) {
+      if (isSupplyChainSource(alert.source)) {
+        continue;
+      }
+
       const key = `${alert.source}:${alert.check}`;
       seenKeys.add(key);
 
@@ -67,4 +71,8 @@ export class AlertEscalator {
 
     return escalations;
   }
+}
+
+export function isSupplyChainSource(source: string): boolean {
+  return source.startsWith('supply-chain');
 }

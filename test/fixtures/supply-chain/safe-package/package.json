@@ -1,0 +1,5 @@
+{
+  "name": "@orderly-network/sdk",
+  "version": "1.0.0",
+  "description": "Simulated safe package for testing — no lifecycle hooks, no suspicious patterns"
+}

@@ -8,11 +8,15 @@ import { checkGrowthFeeConflict } from './rules/growth-fee-conflict.js';
 import { checkWashListing } from './rules/wash-listing.js';
 import { checkCooldownViolation } from './rules/cooldown-violation.js';
 import { checkGhostListing } from './rules/ghost-listing.js';
+import { checkSupplyChainWorm } from './rules/supply-chain-worm.js';
+import { checkCredentialRadius } from './rules/credential-radius.js';
+import { WorkflowDriftDetector } from './rules/workflow-drift.js';
 
 const MAX_WINDOW = 10;
 
 export class AuditCorrelator {
   private window: SystemSnapshot[] = [];
+  private workflowDrift = new WorkflowDriftDetector();
 
   record(snapshot: SystemSnapshot): void {
     this.window.push(snapshot);
@@ -37,6 +41,9 @@ export class AuditCorrelator {
     alerts.push(...checkWashListing(snapshot, manifest));
     alerts.push(...checkCooldownViolation(snapshot, manifest));
     alerts.push(...checkGhostListing(snapshot, manifest));
+    alerts.push(...checkSupplyChainWorm(snapshot, manifest));
+    alerts.push(...checkCredentialRadius(snapshot));
+    alerts.push(...this.workflowDrift.check(snapshot));
 
     return alerts;
   }

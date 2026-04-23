@@ -303,6 +303,72 @@ export interface ListingSnapshot {
   previousAuditLogSize: number;
 }
 
+// ─── Workstation Probe Snapshots ─────────────────────────────
+
+export interface ProcessInfo {
+  pid: number;
+  name: string;
+  command: string;
+  ppid: number;
+  user?: string;
+  startedAt?: number;
+}
+
+export interface WorkstationSnapshot {
+  processes: ProcessInfo[];
+  openPorts: number[];
+  cliVersions: Record<string, string>;
+  hostname: string;
+  platform: string;
+}
+
+export interface GitHubWebhookEvent {
+  eventType: string;
+  repo: string;
+  actor: string;
+  timestamp: number;
+  payload: Record<string, unknown>;
+}
+
+export interface GitHubSnapshot {
+  recentEvents: GitHubWebhookEvent[];
+  workflowFiles: Array<{ path: string; hash: string; modifiedAt: number }>;
+}
+
+export interface ProcessSnapshot {
+  processes: ProcessInfo[];
+  suspiciousChildren: ProcessInfo[];
+  nodeProcessCount: number;
+}
+
+export interface NetworkConnection {
+  localAddress: string;
+  localPort: number;
+  remoteAddress: string;
+  remotePort: number;
+  state: string;
+  pid?: number;
+  process?: string;
+}
+
+export interface NetworkSnapshot {
+  connections: NetworkConnection[];
+  nonAllowlistedOutbound: NetworkConnection[];
+}
+
+export interface FileAccessEvent {
+  path: string;
+  operation: 'read' | 'write' | 'delete' | 'create';
+  pid?: number;
+  process?: string;
+  timestamp: number;
+}
+
+export interface FilesystemSnapshot {
+  sensitivePathAccesses: FileAccessEvent[];
+  modifiedFiles: Array<{ path: string; hash: string; modifiedAt: number }>;
+}
+
 // ─── Combined System Snapshot ─────────────────────────────────
 
 export interface SystemSnapshot {
@@ -313,6 +379,11 @@ export interface SystemSnapshot {
   otterclaw: ProbeResult<OtterClawSnapshot>;
   growthAgent: ProbeResult<GrowthAgentSnapshot>;
   listing: ProbeResult<ListingSnapshot>;
+  workstation?: ProbeResult<WorkstationSnapshot>;
+  github?: ProbeResult<GitHubSnapshot>;
+  process?: ProbeResult<ProcessSnapshot>;
+  network?: ProbeResult<NetworkSnapshot>;
+  filesystem?: ProbeResult<FilesystemSnapshot>;
 }
 
 // ─── Policy Manifest Types ────────────────────────────────────
@@ -422,6 +493,7 @@ export interface PolicyManifest {
   listing?: ListingPolicy;
   dependencies?: DependencyPolicy;
   signer?: SignerPolicy;
+  supplyChain?: SupplyChainPolicy;
   contracts?: Record<string, unknown>;
   oracle?: Record<string, unknown>;
   mcp_tools?: Record<string, unknown>;
@@ -453,7 +525,12 @@ export type SecClawEventModule =
   | 'correlator' | 'drift_detector' | 'integrity_scanner'
   | 'dependency_attestor' | 'signer_health'
   | 'contract_verification' | 'mcp_tool_attestor'
-  | 'oracle_token_verifier';
+  | 'oracle_token_verifier'
+  | 'supply_chain_worm' | 'hook_sandbox' | 'lockfile_attestation'
+  | 'workstation_probe' | 'process_probe' | 'network_probe' | 'filesystem_probe'
+  | 'github_probe'
+  | 'credential_radius' | 'workflow_drift'
+  | 'deploy_pause' | 'token_revoke' | 'signer_rotate' | 'quarantine_builder';
 
 export type SecClawEventAction = 'pass' | 'block' | 'alert' | 'escalate';
 
@@ -536,6 +613,29 @@ export interface DependencyPolicy {
   advisory_severity_threshold?: string;
   blocked_packages: string[];
   drift_action: 'block' | 'alert';
+}
+
+// ─── Supply Chain Policy ────────────────────────────────────
+
+export interface SupplyChainBehavioralDiff {
+  enabled: boolean;
+  newEndpointBlockThreshold: number;
+  sensitivePathBlocklist: string[];
+}
+
+export interface SupplyChainLockfileAttestation {
+  required: boolean;
+  algorithm: string;
+}
+
+export interface SupplyChainPolicy {
+  quarantineWindowHours: number;
+  preinstallHookPolicy: 'allowlist' | 'blocklist' | 'sandbox';
+  preinstallHookAllowlist: string[];
+  behavioralDiff: SupplyChainBehavioralDiff;
+  exfilDomainBlocklist: string[];
+  trustedPublishers: string[];
+  lockfileAttestation: SupplyChainLockfileAttestation;
 }
 
 export interface SignerImmutablePolicy {
@@ -718,4 +818,14 @@ export interface SecClawConfig {
   healthPort: number;
   healthToken: string;
   vaultDecimals: number;
+  supplyChain: {
+    githubToken: string;
+    githubRepos: string[];
+    deployRunnerPort: number;
+    signerRotateEndpoint: string;
+    tokenRevoke: {
+      githubToken: string;
+      npmToken: string;
+    };
+  };
 }

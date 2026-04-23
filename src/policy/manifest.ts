@@ -213,6 +213,23 @@ const ManifestSchema = z.object({
     }).optional(),
   }).optional(),
 
+  supplyChain: z.object({
+    quarantineWindowHours: z.number().int().positive(),
+    preinstallHookPolicy: z.enum(['allowlist', 'blocklist', 'sandbox']),
+    preinstallHookAllowlist: z.array(z.string()),
+    behavioralDiff: z.object({
+      enabled: z.boolean(),
+      newEndpointBlockThreshold: z.number().int().nonnegative(),
+      sensitivePathBlocklist: z.array(z.string()),
+    }),
+    exfilDomainBlocklist: z.array(z.string()),
+    trustedPublishers: z.array(z.string()),
+    lockfileAttestation: z.object({
+      required: z.boolean(),
+      algorithm: z.string(),
+    }),
+  }).optional(),
+
   contracts: z.record(z.unknown()).optional(),
   oracle: z.record(z.unknown()).optional(),
   mcp_tools: z.record(z.unknown()).optional(),
