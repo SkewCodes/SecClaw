@@ -322,12 +322,12 @@ describe('SignerModificationManager', () => {
     );
 
     expect(request.status).toBe('pending');
-    expect(sharedState.pendingModifications.has(request.request_id)).toBe(true);
+    expect(request.request_id in sharedState.pendingModifications).toBe(true);
     expect(events.some((e) => e.check === 'modification_requested')).toBe(true);
   });
 
   it('blocks loosening during active critical alerts', () => {
-    sharedState.activeCriticalAlerts.add('alert-1');
+    sharedState.activeCriticalAlerts['alert-1'] = true;
 
     const request = mgr.requestModification(
       'rate_limits.per_minute',
@@ -354,7 +354,7 @@ describe('SignerModificationManager', () => {
     mgr.approveModification(request.request_id, 'op-1', sharedState);
 
     expect(mgr.getEffectiveValue('rate_limits.per_minute')).toBe(5);
-    expect(sharedState.activeModifications.has(request.request_id)).toBe(true);
+    expect(request.request_id in sharedState.activeModifications).toBe(true);
     expect(events.some((e) => e.check === 'modification_activated')).toBe(true);
   });
 
@@ -387,7 +387,7 @@ describe('SignerModificationManager', () => {
     const cancelled = mgr.cancelModification(request.request_id, sharedState);
     expect(cancelled).toBe(true);
     expect(request.status).toBe('cancelled');
-    expect(sharedState.pendingModifications.has(request.request_id)).toBe(false);
+    expect(request.request_id in sharedState.pendingModifications).toBe(false);
   });
 
   it('reverts active modification', () => {
@@ -499,17 +499,17 @@ describe('checkSignerHealth (integrated)', () => {
   });
 
   it('detects target switching mid-session', () => {
-    const manifest = makeManifest(makeSignerPolicy());
+    const manifest = makeManifest(makeSignerPolicy({ cooldown_ms: 0 }));
     const sharedState = createGateSharedState();
 
     checkSignerHealth(
-      makeRequest({ payload: { ...makeRequest().payload, to: '0xAAA' } }),
+      makeRequest({ payload: { ...makeRequest().payload, to: '0xAAA', data: '0x01' } }),
       manifest,
       sharedState,
     );
 
     const result = checkSignerHealth(
-      makeRequest({ payload: { ...makeRequest().payload, to: '0xBBB' } }),
+      makeRequest({ payload: { ...makeRequest().payload, to: '0xBBB', data: '0x02' } }),
       manifest,
       sharedState,
     );

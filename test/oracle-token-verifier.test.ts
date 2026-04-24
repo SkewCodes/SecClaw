@@ -50,10 +50,11 @@ function makeRequest(overrides: Partial<GateRequest> & { payload?: Partial<GateR
 
 function makeSharedState(): GateSharedState {
   return {
-    activeCriticalAlerts: new Set(),
-    activeModifications: new Map(),
-    pendingModifications: new Map(),
+    activeCriticalAlerts: {},
+    activeModifications: {},
+    pendingModifications: {},
     recentListings: [],
+    signerRotationTriggeredAt: null,
   };
 }
 

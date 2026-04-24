@@ -9,6 +9,8 @@ export interface HealthState {
   lastAlertCounts: Record<AlertSeverity, number>;
   lastSnapshot: SystemSnapshot | null;
   pollIntervalSec: number;
+  lastSkillHashes: Record<string, string>;
+  lastSkillHashScanAt: number | null;
 }
 
 export function createHealthServer(
@@ -35,6 +37,17 @@ export function createHealthServer(
         return;
       }
       handleStatus(state, res);
+      return;
+    }
+
+    const skillHashMatch = req.url?.match(/^\/api\/v1\/skill-hash\/(.+?)(?:\?|$)/);
+    if (skillHashMatch) {
+      if (statusToken && !checkAuth(req, statusToken)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized — provide Bearer token or ?token= query param' }));
+        return;
+      }
+      handleSkillHash(state, decodeURIComponent(skillHashMatch[1]), res);
       return;
     }
 
@@ -123,4 +136,22 @@ function summarizeProbe(probe: { ok: boolean; error?: string; latencyMs: number 
     error: probe.error ?? null,
     latency_ms: probe.latencyMs,
   };
+}
+
+function handleSkillHash(state: HealthState, skillId: string, res: ServerResponse): void {
+  const hash = state.lastSkillHashes[skillId];
+  if (!hash) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: `Skill '${skillId}' not found in last scan` }));
+    return;
+  }
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    skill_id: skillId,
+    hash,
+    scanned_at: state.lastSkillHashScanAt
+      ? new Date(state.lastSkillHashScanAt).toISOString()
+      : null,
+  }));
 }

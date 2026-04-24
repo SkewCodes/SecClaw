@@ -260,7 +260,11 @@ const ManifestSchema = z.object({
     blocked_tokens: z.array(z.string()),
   }).optional(),
 
-  mcp_tools: z.record(z.unknown()).optional(),
+  mcp_tools: z.record(z.object({
+    endpoint_url: z.string().url(),
+    expected_hash: z.string(),
+    allowlisted_servers: z.array(z.string()),
+  })).optional(),
 });
 
 export function loadManifest(path: string): PolicyManifest {

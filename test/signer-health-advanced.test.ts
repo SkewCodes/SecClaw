@@ -334,7 +334,7 @@ describe('SignerModificationManager (delayed activation)', () => {
     vi.advanceTimersByTime(300_000); // 300s delay
 
     expect(mgr.getEffectiveValue('rate_limits.per_minute')).toBe(25);
-    expect(sharedState.activeModifications.has(request.request_id)).toBe(true);
+    expect(request.request_id in sharedState.activeModifications).toBe(true);
     expect(events.some((e) => e.check === 'modification_activated')).toBe(true);
 
     mgr.destroy();
@@ -512,13 +512,13 @@ describe('checkSignerHealth (value_usd field)', () => {
   });
 
   it('records exposure and blocks on second request exceeding limit', () => {
-    const policy = makeSignerPolicy();
+    const policy = makeSignerPolicy({ cooldown_ms: 0 });
     const manifest = makeManifest(policy);
     const sharedState = createGateSharedState();
 
     checkSignerHealth(
       makeRequest({
-        payload: { ...makeRequest().payload, value_usd: 30000 },
+        payload: { ...makeRequest().payload, value_usd: 30000, data: '0x01' },
       }),
       manifest,
       sharedState,
@@ -526,7 +526,7 @@ describe('checkSignerHealth (value_usd field)', () => {
 
     const result = checkSignerHealth(
       makeRequest({
-        payload: { ...makeRequest().payload, value_usd: 25000 },
+        payload: { ...makeRequest().payload, value_usd: 25000, data: '0x02' },
       }),
       manifest,
       sharedState,

@@ -244,10 +244,10 @@ describe('Daemon + Gate Integration', () => {
     resetAttestationState();
 
     const sharedState = createGateSharedState();
-    sharedState.activeCriticalAlerts.add('daemon-alert-001');
-    sharedState.activeCriticalAlerts.add('daemon-alert-002');
+    sharedState.activeCriticalAlerts['daemon-alert-001'] = true;
+    sharedState.activeCriticalAlerts['daemon-alert-002'] = true;
 
-    expect(sharedState.activeCriticalAlerts.size).toBe(2);
+    expect(Object.keys(sharedState.activeCriticalAlerts).length).toBe(2);
 
     const ctx: GateContext = {
       manifest,
@@ -265,6 +265,6 @@ describe('Daemon + Gate Integration', () => {
 
     const response = await gate(request, ctx);
     expect(response.allowed).toBe(true);
-    expect(ctx.sharedState.activeCriticalAlerts.size).toBe(2);
+    expect(Object.keys(ctx.sharedState.activeCriticalAlerts).length).toBe(2);
   });
 });

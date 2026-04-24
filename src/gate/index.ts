@@ -159,6 +159,8 @@ export async function gate(
     },
   ];
 
+  // TODO(tier-3): MCP tool attestation -- blocked until N > 5 builders
+
   if (ctx.signerHealthCheck) {
     modules.push({
       name: 'signer_health',
@@ -229,9 +231,9 @@ export async function gate(
 
 export function createGateSharedState(): GateSharedState {
   return {
-    activeCriticalAlerts: new Set(),
-    activeModifications: new Map(),
-    pendingModifications: new Map(),
+    activeCriticalAlerts: {},
+    activeModifications: {},
+    pendingModifications: {},
     recentListings: [],
     signerRotationTriggeredAt: null,
   };

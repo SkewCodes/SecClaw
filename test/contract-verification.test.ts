@@ -53,9 +53,9 @@ function makeRequest(overrides: Partial<GateRequest> = {}): GateRequest {
 
 function makeSharedState(): GateSharedState {
   return {
-    activeCriticalAlerts: new Set(),
-    activeModifications: new Map(),
-    pendingModifications: new Map(),
+    activeCriticalAlerts: {},
+    activeModifications: {},
+    pendingModifications: {},
     recentListings: [],
     signerRotationTriggeredAt: null,
   };

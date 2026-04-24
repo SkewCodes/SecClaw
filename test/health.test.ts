@@ -11,6 +11,8 @@ function makeHealthState(overrides?: Partial<HealthState>): HealthState {
     lastAlertCounts: { critical: 0, high: 0, warning: 0, info: 0 },
     lastSnapshot: null,
     pollIntervalSec: 30,
+    lastSkillHashes: {},
+    lastSkillHashScanAt: null,
     ...overrides,
   };
 }

@@ -6,20 +6,9 @@ import type {
   PolicyManifest,
   SecClawEvent,
   OracleTokenPolicy,
-  OracleAdapter,
   OraclePriceResult,
   TokenMetadata,
 } from '../types.js';
-
-let adapters: OracleAdapter[] = [];
-
-export function registerOracleAdapters(newAdapters: OracleAdapter[]): void {
-  adapters = newAdapters;
-}
-
-export function getRegisteredAdapters(): readonly OracleAdapter[] {
-  return adapters;
-}
 
 export function checkOracleTokenVerification(
   request: GateRequest,
