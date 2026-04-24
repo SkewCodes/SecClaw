@@ -1,15 +1,27 @@
-import { execSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { platform } from 'node:os';
 import type { ProcessInfo } from '../types.js';
 
-export function listSystemProcesses(): ProcessInfo[] {
+const execFileAsync = promisify(execFile);
+
+export async function listSystemProcesses(): Promise<ProcessInfo[]> {
   try {
     const isWin = platform() === 'win32';
-    const cmd = isWin
-      ? 'wmic process get ProcessId,Name,CommandLine,ParentProcessId /format:csv'
-      : 'ps -eo pid,ppid,user,comm,args --no-headers';
+    let output: string;
 
-    const output = execSync(cmd, { timeout: 5000, encoding: 'utf-8' });
+    if (isWin) {
+      const { stdout } = await execFileAsync('wmic', [
+        'process', 'get', 'ProcessId,Name,CommandLine,ParentProcessId', '/format:csv',
+      ], { timeout: 5000 });
+      output = stdout;
+    } else {
+      const { stdout } = await execFileAsync('/bin/ps', [
+        '-eo', 'pid,ppid,user,comm,args', '--no-headers',
+      ], { timeout: 5000 });
+      output = stdout;
+    }
+
     const lines = output.trim().split('\n').filter(Boolean);
     const processes: ProcessInfo[] = [];
 

@@ -549,7 +549,8 @@ export type SecClawEventModule =
   | 'github_probe'
   | 'credential_radius' | 'workflow_drift'
   | 'otterclaw_receiver'
-  | 'deploy_pause' | 'token_revoke' | 'signer_rotate' | 'quarantine_builder';
+  | 'deploy_pause' | 'token_revoke' | 'signer_rotate' | 'quarantine_builder'
+  | 'gate' | 'slippage_guard';
 
 export type SecClawEventAction = 'pass' | 'block' | 'alert' | 'escalate';
 
@@ -850,6 +851,7 @@ export interface GateSharedState {
   activeModifications: Map<string, ModificationRequest>;
   pendingModifications: Map<string, ModificationRequest>;
   recentListings: ListingEvent[];
+  signerRotationTriggeredAt: number | null;
 }
 
 // ─── Config Types ─────────────────────────────────────────────

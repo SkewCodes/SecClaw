@@ -100,6 +100,23 @@ export function checkContractVerification(
       return { entries, events };
     }
 
+    // Calldata length validation (Item 8): only validate when data is long enough
+    // to plausibly contain encoded parameters (> selector-only length)
+    if (request.payload.data && request.payload.data.length > 10 && allowedFn.params) {
+      const expectedParams = Object.keys(allowedFn.params).length;
+      if (expectedParams > 0 && !validateCalldataLength(request.payload.data, expectedParams)) {
+        const latency = Math.round(performance.now() - start);
+        entries.push({ module: 'contract_verification', check: 'calldata_length', result: 'block', latency_ms: latency });
+        events.push(makeEvent(request, 'block', 'critical', 'calldata_length_invalid', {
+          expected: `>= ${4 + expectedParams * 32} bytes`,
+          actual: `${(request.payload.data.length - 2) / 2} bytes`,
+          policy_rule: 'contracts.allowed_interactions.functions',
+          message: `Calldata length mismatch for ${selector} on ${target} — expected at least ${expectedParams} ABI-encoded params`,
+        }));
+        return { entries, events };
+      }
+    }
+
     const boundsResult = checkParamBounds(request, allowedFn.params, selector, target);
     if (boundsResult) {
       const latency = Math.round(performance.now() - start);
@@ -160,6 +177,12 @@ function checkParamBounds(
   }
 
   return null;
+}
+
+export function validateCalldataLength(data: string, expectedParams: number): boolean {
+  const expectedMinLength = 4 + (expectedParams * 32);
+  const actualLength = (data.length - 2) / 2;
+  return actualLength >= expectedMinLength;
 }
 
 function makeEvent(

@@ -1,11 +1,13 @@
 import type { Alert, AlertHandler, AlertSeverity } from '../types.js';
 
 const MIN_INTERVAL_MS = 1000;
+const MAX_QUEUE_SIZE = 1000;
 
 export class WebhookHandler implements AlertHandler {
   private lastSentAt = 0;
   private queue: Alert[] = [];
   private drainPromise: Promise<void> | null = null;
+  private _overflowEmitted = false;
 
   constructor(
     private url: string,
@@ -14,6 +16,14 @@ export class WebhookHandler implements AlertHandler {
 
   async handle(alert: Alert): Promise<void> {
     if (!this.shouldSend(alert.severity)) return;
+
+    if (this.queue.length >= MAX_QUEUE_SIZE) {
+      this.queue.shift();
+      if (!this._overflowEmitted) {
+        this._overflowEmitted = true;
+        console.error('[secclaw] Webhook alert queue overflow — dropping oldest alerts');
+      }
+    }
 
     this.queue.push(alert);
     this.scheduleDrain();

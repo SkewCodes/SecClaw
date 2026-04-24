@@ -73,6 +73,15 @@ export function checkOracleTokenVerification(
 
   const prices = extractOraclePrices(request);
   if (prices && prices.length > 0) {
+    // Price staleness check (Item 9) — runs before deviation
+    const staleEvent = checkPriceStaleness(request, prices, policy);
+    if (staleEvent) {
+      const latency = Math.round(performance.now() - start);
+      entries.push({ module: 'oracle_token_verifier', check: 'oracle_price_stale', result: 'block', latency_ms: latency });
+      events.push(staleEvent);
+      return { entries, events };
+    }
+
     const deviation = checkMultiSourceDeviation(request, prices, policy);
     if (deviation) {
       const latency = Math.round(performance.now() - start);
@@ -214,6 +223,29 @@ function checkMultiSourceDeviation(
       policy_rule: 'oracle.max_deviation_pct',
       message: `Oracle price deviation ${deviationPct.toFixed(2)}% exceeds max ${policy.max_deviation_pct}% (sources: ${prices.map((p) => `${p.source}=$${p.price}`).join(', ')})`,
     });
+  }
+
+  return null;
+}
+
+function checkPriceStaleness(
+  request: GateRequest,
+  prices: OraclePriceResult[],
+  policy: OracleTokenPolicy,
+): SecClawEvent | null {
+  const maxAge = policy.cache_ttl_sec * 1000;
+  const now = Date.now();
+
+  for (const price of prices) {
+    const age = now - price.timestamp;
+    if (age > maxAge) {
+      return makeEvent(request, 'block', 'critical', 'oracle_price_stale', {
+        expected: `< ${policy.cache_ttl_sec}s old`,
+        actual: `${(age / 1000).toFixed(0)}s old (source: ${price.source})`,
+        policy_rule: 'oracle.cache_ttl_sec',
+        message: `Oracle price from ${price.source} is ${(age / 1000).toFixed(0)}s old, max ${policy.cache_ttl_sec}s`,
+      });
+    }
   }
 
   return null;

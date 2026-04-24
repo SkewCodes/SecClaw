@@ -1,6 +1,9 @@
-import { execSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { platform } from 'node:os';
 import type { ProbeResult, NetworkSnapshot, NetworkConnection } from '../types.js';
+
+const execFileAsync = promisify(execFile);
 
 export class NetworkProbe {
   constructor(
@@ -15,7 +18,7 @@ export class NetworkProbe {
     const start = Date.now();
 
     try {
-      const connections = getConnections();
+      const connections = await getConnections();
       const nonAllowlistedOutbound = connections.filter((conn) => {
         if (isLocalAddress(conn.remoteAddress)) return false;
         return !this.domainAllowlist.some((domain) =>
@@ -47,16 +50,25 @@ function isLocalAddress(addr: string): boolean {
     || addr.startsWith('172.');
 }
 
-function getConnections(): NetworkConnection[] {
+async function getConnections(): Promise<NetworkConnection[]> {
   try {
     const isWin = platform() === 'win32';
-    const cmd = isWin
-      ? 'netstat -ano -p TCP'
-      : 'ss -tnp 2>/dev/null || netstat -tnp 2>/dev/null';
+    let output: string;
 
-    const output = execSync(cmd, { timeout: 5000, encoding: 'utf-8' });
+    if (isWin) {
+      const { stdout } = await execFileAsync('netstat', ['-ano', '-p', 'TCP'], { timeout: 5000 });
+      output = stdout;
+    } else {
+      try {
+        const { stdout } = await execFileAsync('/usr/sbin/ss', ['-tnp'], { timeout: 5000 });
+        output = stdout;
+      } catch {
+        const { stdout } = await execFileAsync('/bin/netstat', ['-tnp'], { timeout: 5000 });
+        output = stdout;
+      }
+    }
+
     const connections: NetworkConnection[] = [];
-
     for (const line of output.split('\n')) {
       const conn = parseLine(line, isWin);
       if (conn) connections.push(conn);

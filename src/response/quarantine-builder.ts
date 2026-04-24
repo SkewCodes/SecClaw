@@ -1,14 +1,11 @@
 import type { Alert, AlertHandler } from '../types.js';
+import { signPayload } from '../alerts/pause-signal-verifier.js';
 
 export interface QuarantineConfig {
   pausePort: number;
   onQuarantine?: (builderId: string, alert: Alert) => void;
 }
 
-/**
- * Isolates a compromised builder from the deploy pipeline by sending
- * a targeted pause signal. Uses the pause signal infrastructure.
- */
 export class QuarantineBuilderHandler implements AlertHandler {
   private quarantinedBuilders = new Set<string>();
 
@@ -49,11 +46,19 @@ export class QuarantineBuilderHandler implements AlertHandler {
       timestamp: alert.timestamp,
     };
 
+    const body = JSON.stringify(payload);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    const secret = process.env.SECCLAW_PAUSE_SECRET;
+    if (secret) {
+      headers['X-SecClaw-Signature'] = signPayload(body, secret);
+    }
+
     try {
       await fetch(`http://localhost:${this.config.pausePort}/api/v1/pause`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        headers,
+        body,
         signal: AbortSignal.timeout(3000),
       });
     } catch {

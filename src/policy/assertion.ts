@@ -111,13 +111,28 @@ function assertYieldClaw(data: YieldClawSnapshot, manifest: PolicyManifest): Ale
     }
   }
 
-  // Per-position leverage check
+  // Per-position leverage check + liquidation distance (Item 19)
   for (const pos of data.positions) {
     if (pos.leverage > hl.max_leverage) {
       alerts.push(createAlert('yieldclaw', 'position_leverage_exceeded', 'high',
         `${pos.symbol} leverage ${pos.leverage}x exceeds limit ${hl.max_leverage}x`,
         { symbol: pos.symbol, leverage: pos.leverage, limit: hl.max_leverage },
       ));
+    }
+
+    if (pos.est_liq_price > 0 && pos.mark_price > 0) {
+      const distancePct = Math.abs(pos.mark_price - pos.est_liq_price) / pos.mark_price * 100;
+      if (distancePct < 5) {
+        alerts.push(createAlert('yieldclaw', 'liquidation_proximity', 'critical',
+          `${pos.symbol} is ${distancePct.toFixed(1)}% from liquidation price $${pos.est_liq_price}`,
+          { symbol: pos.symbol, markPrice: pos.mark_price, liqPrice: pos.est_liq_price, distancePct },
+        ));
+      } else if (distancePct < 15) {
+        alerts.push(createAlert('yieldclaw', 'liquidation_approaching', 'high',
+          `${pos.symbol} is ${distancePct.toFixed(1)}% from liquidation`,
+          { symbol: pos.symbol, distancePct },
+        ));
+      }
     }
   }
 

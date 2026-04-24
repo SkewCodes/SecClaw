@@ -45,7 +45,7 @@ function makeRequest(overrides: Partial<GateRequest> = {}): GateRequest {
     action_type: 'call',
     payload: {
       to: '0xabcdef1234567890abcdef1234567890abcdef12',
-      data: '0xa9059cbb000000000000000000000000',
+      data: '0xa9059cbb0000000000000000000000000000000000000000000000000000000000002710',
     },
     ...overrides,
   };
@@ -57,6 +57,7 @@ function makeSharedState(): GateSharedState {
     activeModifications: new Map(),
     pendingModifications: new Map(),
     recentListings: [],
+    signerRotationTriggeredAt: null,
   };
 }
 
@@ -162,7 +163,7 @@ describe('Contract Verification Gate Module', () => {
       makeRequest({
         payload: {
           to: '0xabcdef1234567890abcdef1234567890abcdef12',
-          data: '0xa9059cbb000000000000000000000000',
+          data: '0xa9059cbb000000000000000000000000000000000000000000000000000000000001869f',
           tool_params: { amount: 99999 },
         },
       }),
@@ -180,7 +181,7 @@ describe('Contract Verification Gate Module', () => {
       makeRequest({
         payload: {
           to: '0xabcdef1234567890abcdef1234567890abcdef12',
-          data: '0xa9059cbb000000000000000000000000',
+          data: '0xa9059cbb0000000000000000000000000000000000000000000000000000000000001388',
           tool_params: { amount: 5000 },
         },
       }),
@@ -207,7 +208,7 @@ describe('Contract Verification Gate Module', () => {
       makeRequest({
         payload: {
           to: '0xABCDEF1234567890ABCDEF1234567890ABCDEF12',
-          data: '0xa9059cbb000000000000000000000000',
+          data: '0xa9059cbb0000000000000000000000000000000000000000000000000000000000002710',
         },
       }),
       makeManifest(makePolicy()),

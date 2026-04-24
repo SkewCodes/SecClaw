@@ -1,14 +1,12 @@
-import type { Alert, AlertHandler } from '../types.js';
+import type { Alert, AlertHandler, GateSharedState } from '../types.js';
+import { signPayload } from '../alerts/pause-signal-verifier.js';
 
 export interface SignerRotateConfig {
   rotationEndpoint?: string;
   onRotate?: (alert: Alert) => void;
+  sharedState?: GateSharedState;
 }
 
-/**
- * Triggers ephemeral signer rotation when a critical supply-chain
- * alert indicates potential key compromise.
- */
 export class SignerRotateHandler implements AlertHandler {
   constructor(private config: SignerRotateConfig = {}) {}
 
@@ -23,18 +21,32 @@ export class SignerRotateHandler implements AlertHandler {
 
     if (!requiresRotation) return;
 
+    // Hardcoded invariant #7: trigger rotation lockout on gate shared state
+    if (this.config.sharedState) {
+      this.config.sharedState.signerRotationTriggeredAt = Date.now();
+    }
+
     if (this.config.rotationEndpoint) {
       try {
+        const payload = {
+          source: 'secclaw',
+          module: 'signer_rotate',
+          reason: alert.check,
+          message: alert.message,
+          timestamp: alert.timestamp,
+        };
+        const body = JSON.stringify(payload);
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+        const secret = process.env.SECCLAW_PAUSE_SECRET;
+        if (secret) {
+          headers['X-SecClaw-Signature'] = signPayload(body, secret);
+        }
+
         const res = await fetch(this.config.rotationEndpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: 'secclaw',
-            module: 'signer_rotate',
-            reason: alert.check,
-            message: alert.message,
-            timestamp: alert.timestamp,
-          }),
+          headers,
+          body,
           signal: AbortSignal.timeout(10_000),
         });
 

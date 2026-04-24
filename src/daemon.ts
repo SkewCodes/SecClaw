@@ -63,7 +63,8 @@ async function main(): Promise<void> {
   const v2Emitter = new SecClawEventEmitter(v2LogPath);
   const gateSharedState = createGateSharedState();
   console.log(`[secclaw] V2 events logging to ${v2LogPath}`);
-  bus.register(new JsonlLogger(config.logPath));
+  const jsonlLogger = new JsonlLogger(config.logPath);
+  bus.register(jsonlLogger);
 
   const pushHandlers: AlertHandler[] = [];
 
@@ -107,6 +108,7 @@ async function main(): Promise<void> {
   if (!config.dryRun && config.supplyChain.signerRotateEndpoint) {
     const signerRotate = new SignerRotateHandler({
       rotationEndpoint: config.supplyChain.signerRotateEndpoint,
+      sharedState: gateSharedState,
     });
     bus.register(signerRotate);
     console.log('[secclaw] Signer rotate response enabled');
@@ -256,13 +258,15 @@ async function main(): Promise<void> {
 
     const interval = setInterval(doTick, config.pollIntervalSec * 1000);
 
-    const shutdown = () => {
+    const shutdown = async () => {
       console.log('\n[secclaw] Shutting down...');
       clearInterval(interval);
       digest.stop();
       healthServer.close();
       if (receiverServer) receiverServer.close();
       if (stopWatching) stopWatching();
+      await v2Emitter.flush().catch(() => {});
+      await jsonlLogger.flush().catch(() => {});
       process.exit(0);
     };
 

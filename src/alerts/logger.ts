@@ -1,14 +1,32 @@
-import { appendFileSync } from 'node:fs';
+import { createWriteStream, type WriteStream } from 'node:fs';
 import type { Alert, AlertHandler } from '../types.js';
 
 export class JsonlLogger implements AlertHandler {
-  constructor(private logPath: string) {}
+  private stream: WriteStream;
+
+  constructor(logPath: string) {
+    this.stream = createWriteStream(logPath, { flags: 'a' });
+  }
 
   async handle(alert: Alert): Promise<void> {
     const entry = JSON.stringify({
       ...alert,
       logged_at: new Date().toISOString(),
     });
-    appendFileSync(this.logPath, entry + '\n', 'utf-8');
+    return new Promise((resolve, reject) => {
+      this.stream.write(entry + '\n', (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  flush(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.stream.end((err: Error | null | undefined) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
   }
 }

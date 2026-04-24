@@ -91,18 +91,24 @@ export function scanSkillContent(content: string, urlAllowlist: string[]): ScanF
   return findings;
 }
 
+const scanCache = new Map<string, ScanFinding[]>();
+
 export function scanSkills(skills: SkillFileInfo[], urlAllowlist: string[]): Alert[] {
   const alerts: Alert[] = [];
 
   for (const skill of skills) {
-    let content: string;
-    try {
-      content = readFileSync(skill.path, 'utf-8');
-    } catch {
-      continue;
-    }
+    let findings = scanCache.get(skill.hash);
 
-    const findings = scanSkillContent(content, urlAllowlist);
+    if (!findings) {
+      let content: string;
+      try {
+        content = readFileSync(skill.path, 'utf-8');
+      } catch {
+        continue;
+      }
+      findings = scanSkillContent(content, urlAllowlist);
+      scanCache.set(skill.hash, findings);
+    }
 
     for (const finding of findings) {
       const severity = finding.pattern.startsWith('injection:') ||

@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
     "secclaw:attest": "tsx scripts/attest.ts",
-    "secclaw:preinstall": "tsx src/cli/preinstall.ts"
+    "secclaw:preinstall": "tsx src/cli/preinstall.ts",
+    "secclaw:sign-manifest": "tsx scripts/sign-manifest.ts"
   },
   "dependencies": {
     "commander": "^12.1.0",

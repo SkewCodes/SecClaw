@@ -92,6 +92,7 @@ describe('Gate Orchestrator', () => {
 
   it('emits V2 events to the emitter', async () => {
     await gate(makeRequest(), ctx);
+    await ctx.emitter.flush();
 
     const content = existsSync(testLogPath)
       ? require('node:fs').readFileSync(testLogPath, 'utf-8').trim()

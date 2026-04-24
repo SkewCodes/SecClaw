@@ -1,7 +1,9 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { createPublicClient, http, formatEther, type PublicClient, type Address } from 'viem';
+import { TransactionDeduplicator } from './transaction-dedup.js';
+import { GasPriceMonitor } from './gas-monitor.js';
 import { arbitrum, arbitrumSepolia } from 'viem/chains';
 import { createSecClawEvent } from '../events/schema.js';
 import type {
@@ -117,7 +119,10 @@ interface NonceState {
   expected_nonce: number;
   last_confirmed_nonce: number;
   last_updated: string;
+  hmac?: string;
 }
+
+const NONCE_SIGNING_KEY = process.env.SECCLAW_NONCE_SIGNING_KEY ?? process.env.SECCLAW_MANIFEST_SIGNING_KEY;
 
 export class NonceTracker {
   private state: NonceState;
@@ -158,13 +163,43 @@ export class NonceTracker {
     return this.state.expected_nonce;
   }
 
+  private computeHMAC(state: NonceState): string {
+    if (!NONCE_SIGNING_KEY) return '';
+    const data = `${state.expected_nonce}:${state.last_confirmed_nonce}:${state.last_updated}`;
+    return createHmac('sha256', NONCE_SIGNING_KEY).update(data).digest('hex');
+  }
+
+  private verifyHMAC(state: NonceState): boolean {
+    if (!NONCE_SIGNING_KEY) return true;
+    if (!state.hmac) return false;
+    const expected = this.computeHMAC(state);
+    if (expected.length !== state.hmac.length) return false;
+    return timingSafeEqual(Buffer.from(expected), Buffer.from(state.hmac));
+  }
+
+  // Hardcoded invariant #8: nonce state HMAC failure does NOT fall back to zero
   private load(): NonceState {
     if (existsSync(this.persistPath)) {
       try {
         const content = readFileSync(this.persistPath, 'utf-8');
-        return JSON.parse(content) as NonceState;
-      } catch {
-        // Corrupted file, start fresh
+        const parsed = JSON.parse(content) as NonceState;
+        if (NONCE_SIGNING_KEY && !this.verifyHMAC(parsed)) {
+          throw new Error(
+            `Nonce state HMAC verification failed at ${this.persistPath} — possible tampering. ` +
+            'Refusing to start. Do NOT fall back to nonce 0.',
+          );
+        }
+        return parsed;
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('HMAC verification failed')) {
+          throw err;
+        }
+        if (NONCE_SIGNING_KEY) {
+          throw new Error(
+            `Nonce state file at ${this.persistPath} is corrupted and signing key is set. ` +
+            'Refusing to start with nonce 0.',
+          );
+        }
       }
     }
     return { expected_nonce: 0, last_confirmed_nonce: -1, last_updated: new Date().toISOString() };
@@ -175,7 +210,11 @@ export class NonceTracker {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    writeFileSync(this.persistPath, JSON.stringify(this.state, null, 2), 'utf-8');
+    const state = { ...this.state };
+    state.hmac = this.computeHMAC(state);
+    const tmpPath = this.persistPath + '.tmp';
+    writeFileSync(tmpPath, JSON.stringify(state, null, 2), 'utf-8');
+    renameSync(tmpPath, this.persistPath);
   }
 }
 
@@ -680,6 +719,8 @@ export interface SignerHealthContext {
   accelerationDetector: AccelerationDetector;
   targetSwitchDetector: TargetSwitchDetector;
   modificationManager: SignerModificationManager;
+  transactionDedup: TransactionDeduplicator;
+  gasPriceMonitor: GasPriceMonitor;
   cachedBalanceEth: number | null;
   balanceCacheUpdatedAt: number;
   walletAddress: string | null;
@@ -715,6 +756,8 @@ export function getOrCreateSignerContext(
       agentId,
       onEvent,
     ),
+    transactionDedup: new TransactionDeduplicator(),
+    gasPriceMonitor: new GasPriceMonitor(),
     cachedBalanceEth: null,
     balanceCacheUpdatedAt: 0,
     walletAddress: null,
@@ -792,8 +835,11 @@ export function checkSignerHealth(
     ctx.walletAddress = request.payload.wallet_address;
   }
 
-  // Gas bounds
-  checkGasBounds(request, signer, mgr, entries, events);
+  // Transaction replay protection (Item 7)
+  checkTransactionReplay(request, ctx, entries, events);
+
+  // Gas bounds + gas price monitoring (Items 5, 11)
+  checkGasBounds(request, signer, mgr, ctx, entries, events);
 
   // Rate limit
   checkRateLimit(request, ctx, mgr, entries, events);
@@ -828,10 +874,45 @@ export function checkSignerHealth(
 
 // ─── Individual Checks ──────────────────────────────────────
 
+function checkTransactionReplay(
+  request: GateRequest,
+  ctx: SignerHealthContext,
+  entries: GateCheckEntry[],
+  events: SecClawEvent[],
+): void {
+  const { to, data, value, gas_limit, nonce } = request.payload;
+  if (!to && !data) {
+    entries.push({ module: 'signer_health', check: 'transaction_replay', result: 'skip', latency_ms: 0 });
+    return;
+  }
+
+  if (ctx.transactionDedup.isDuplicate(to, data, value, gas_limit, nonce)) {
+    entries.push({ module: 'signer_health', check: 'transaction_replay', result: 'block', latency_ms: 0 });
+    events.push(createSecClawEvent({
+      source: 'gate',
+      agent_id: request.agent_id,
+      module: 'signer_health',
+      action: 'block',
+      severity: 'critical',
+      check: 'transaction_replay_detected',
+      details: {
+        expected: 'unique transaction',
+        actual: 'duplicate transaction hash detected',
+        policy_rule: 'signer.transaction_replay_protection',
+        message: 'Transaction replay detected — identical transaction was recently submitted',
+      },
+    }));
+    return;
+  }
+
+  entries.push({ module: 'signer_health', check: 'transaction_replay', result: 'pass', latency_ms: 0 });
+}
+
 function checkGasBounds(
   request: GateRequest,
   signer: SignerPolicy,
   mgr: SignerModificationManager,
+  ctx: SignerHealthContext,
   entries: GateCheckEntry[],
   events: SecClawEvent[],
 ): void {
@@ -876,6 +957,28 @@ function checkGasBounds(
       },
     }));
     return;
+  }
+
+  // Gas price anomaly detection (Item 11)
+  if (gasPrice !== undefined) {
+    ctx.gasPriceMonitor.record(gasPrice);
+    const anomaly = ctx.gasPriceMonitor.detectAnomaly(gasPrice, effectiveMaxGwei);
+    if (anomaly.anomalous) {
+      events.push(createSecClawEvent({
+        source: 'gate',
+        agent_id: request.agent_id,
+        module: 'signer_health',
+        action: 'alert',
+        severity: 'warning',
+        check: 'gas_price_anomaly',
+        details: {
+          expected: 'normal gas pricing pattern',
+          actual: anomaly.reason,
+          policy_rule: 'signer.gas.price_mode',
+          message: `Gas price anomaly: ${anomaly.reason}`,
+        },
+      }));
+    }
   }
 
   entries.push({ module: 'signer_health', check: 'gas_bounds', result: 'pass', latency_ms: 0 });

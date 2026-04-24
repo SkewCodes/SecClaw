@@ -66,7 +66,7 @@ describe('Backward Compatibility', () => {
     const request: GateRequest = {
       agent_id: 'test',
       action_type: 'sign',
-      payload: { to: '0x123', value: '100' },
+      payload: { to: '0x1234567890abcdef1234567890abcdef12345678', value: '100' },
     };
 
     const response = await gate(request, ctx);
@@ -125,7 +125,7 @@ describe('Daemon + Gate Integration', () => {
     const request: GateRequest = {
       agent_id: 'test',
       action_type: 'sign',
-      payload: { to: '0x123', value: '100' },
+      payload: { to: '0x1234567890abcdef1234567890abcdef12345678', value: '100' },
     };
 
     const response = await gate(request, ctx);
@@ -150,10 +150,11 @@ describe('Daemon + Gate Integration', () => {
     const request: GateRequest = {
       agent_id: 'test',
       action_type: 'sign',
-      payload: { to: '0x123', value: '100' },
+      payload: { to: '0x1234567890abcdef1234567890abcdef12345678', value: '100' },
     };
 
     await gate(request, ctx);
+    await ctx.emitter.flush();
 
     expect(existsSync(testV2LogPath)).toBe(true);
     const content = readFileSync(testV2LogPath, 'utf-8').trim();
@@ -259,7 +260,7 @@ describe('Daemon + Gate Integration', () => {
     const request: GateRequest = {
       agent_id: 'test',
       action_type: 'sign',
-      payload: { to: '0x123', value: '100' },
+      payload: { to: '0x1234567890abcdef1234567890abcdef12345678', value: '100' },
     };
 
     const response = await gate(request, ctx);

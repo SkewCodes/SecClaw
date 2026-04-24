@@ -27,7 +27,7 @@ export class ProcessProbe {
     const start = Date.now();
 
     try {
-      const processes = listSystemProcesses();
+      const processes = await listSystemProcesses();
       const nodeProcesses = processes.filter((p) =>
         NODE_PROCESS_NAMES.some((n) => p.name.toLowerCase().includes(n)),
       );

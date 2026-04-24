@@ -1,10 +1,6 @@
 import type { Alert, AlertHandler } from '../types.js';
+import { signPayload } from '../alerts/pause-signal-verifier.js';
 
-/**
- * Extends PauseSignalBroadcaster to halt the Starchild deploy runner
- * on critical supply-chain alerts. Sends pause to both the standard
- * pause port and the deploy-runner-specific port.
- */
 export class DeployPauseHandler implements AlertHandler {
   constructor(
     private pausePort: number,
@@ -26,6 +22,14 @@ export class DeployPauseHandler implements AlertHandler {
       action: 'halt_deploy',
     };
 
+    const body = JSON.stringify(payload);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    const secret = process.env.SECCLAW_PAUSE_SECRET;
+    if (secret) {
+      headers['X-SecClaw-Signature'] = signPayload(body, secret);
+    }
+
     const targets = [this.pausePort];
     if (this.deployRunnerPort) {
       targets.push(this.deployRunnerPort);
@@ -35,8 +39,8 @@ export class DeployPauseHandler implements AlertHandler {
       targets.map((port) =>
         fetch(`http://localhost:${port}/api/v1/pause`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          headers,
+          body,
           signal: AbortSignal.timeout(3000),
         }).catch(() => { /* advisory */ }),
       ),

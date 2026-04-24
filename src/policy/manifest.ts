@@ -1,7 +1,8 @@
-import { readFileSync, watchFile, unwatchFile } from 'node:fs';
+import { readFileSync, watchFile, unwatchFile, existsSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 import type { PolicyManifest } from '../types.js';
+import { verifyManifestIntegrity } from './manifest-integrity.js';
 
 const RiskPresetSchema = z.object({
   spread_bps: z.number().positive(),
@@ -264,6 +265,20 @@ const ManifestSchema = z.object({
 
 export function loadManifest(path: string): PolicyManifest {
   const content = readFileSync(path, 'utf-8');
+
+  // Hardcoded invariant #5: Manifest integrity verification before accepting changes
+  const signingKey = process.env.SECCLAW_MANIFEST_SIGNING_KEY;
+  if (signingKey) {
+    const sigPath = path.replace(/\.yaml$/, '') + '.sig';
+    if (!existsSync(sigPath)) {
+      throw new Error(`Manifest signing key is set but signature file not found at ${sigPath}`);
+    }
+    const expectedHmac = readFileSync(sigPath, 'utf-8').trim();
+    if (!verifyManifestIntegrity(content, expectedHmac, signingKey)) {
+      throw new Error('Manifest HMAC verification failed — file may have been tampered with');
+    }
+  }
+
   const parsed = parseYaml(content);
   const result = ManifestSchema.safeParse(parsed);
 

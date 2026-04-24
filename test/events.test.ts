@@ -91,11 +91,15 @@ describe('SecClawEvent Schema', () => {
 describe('SecClawEventEmitter', () => {
   const testLogPath = './test-v2-events.jsonl';
 
+  beforeEach(() => {
+    if (existsSync(testLogPath)) unlinkSync(testLogPath);
+  });
+
   afterEach(() => {
     if (existsSync(testLogPath)) unlinkSync(testLogPath);
   });
 
-  it('writes V2 events to JSONL file', () => {
+  it('writes V2 events to JSONL file', async () => {
     const emitter = new SecClawEventEmitter(testLogPath);
     const event = createSecClawEvent({
       source: 'gate',
@@ -108,6 +112,7 @@ describe('SecClawEventEmitter', () => {
     });
 
     emitter.emit(event);
+    await emitter.flush();
 
     const content = readFileSync(testLogPath, 'utf-8').trim();
     const parsed = JSON.parse(content);
@@ -115,7 +120,7 @@ describe('SecClawEventEmitter', () => {
     expect(parsed.version).toBe('2.0');
   });
 
-  it('writes multiple events as separate lines', () => {
+  it('writes multiple events as separate lines', async () => {
     const emitter = new SecClawEventEmitter(testLogPath);
     const events = [
       createSecClawEvent({
@@ -131,6 +136,7 @@ describe('SecClawEventEmitter', () => {
     ];
 
     emitter.emitAll(events);
+    await emitter.flush();
 
     const lines = readFileSync(testLogPath, 'utf-8').trim().split('\n');
     expect(lines).toHaveLength(2);

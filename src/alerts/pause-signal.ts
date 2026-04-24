@@ -1,4 +1,5 @@
 import type { Alert, AlertHandler } from '../types.js';
+import { signPayload } from './pause-signal-verifier.js';
 
 export class PauseSignalBroadcaster implements AlertHandler {
   constructor(private port: number) {}
@@ -15,11 +16,20 @@ export class PauseSignalBroadcaster implements AlertHandler {
       message: alert.message,
     };
 
+    const body = JSON.stringify(payload);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    // Hardcoded invariant #9: Pause signals carry HMAC when secret is configured
+    const secret = process.env.SECCLAW_PAUSE_SECRET;
+    if (secret) {
+      headers['X-SecClaw-Signature'] = signPayload(body, secret);
+    }
+
     try {
       await fetch(`http://localhost:${this.port}/api/v1/pause`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        headers,
+        body,
         signal: AbortSignal.timeout(3000),
       });
     } catch {

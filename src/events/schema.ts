@@ -21,6 +21,7 @@ const SecClawEventModuleEnum = z.enum([
   'credential_radius', 'workflow_drift',
   'otterclaw_receiver',
   'deploy_pause', 'token_revoke', 'signer_rotate', 'quarantine_builder',
+  'gate', 'slippage_guard',
 ]);
 
 const SecClawEventActionEnum = z.enum(['pass', 'block', 'alert', 'escalate']);

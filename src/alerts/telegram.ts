@@ -16,12 +16,14 @@ const SEVERITY_LABEL: Record<AlertSeverity, string> = {
 
 const MAX_MESSAGE_LENGTH = 4096;
 const MIN_INTERVAL_MS = 3000;
+const MAX_QUEUE_SIZE = 1000;
 
 export class TelegramHandler implements AlertHandler {
   private lastSentAt = 0;
   private queue: Alert[] = [];
   private drainPromise: Promise<void> | null = null;
   private builderTopicIds = new Map<string, number>();
+  private _overflowEmitted = false;
 
   constructor(
     private botToken: string,
@@ -36,6 +38,14 @@ export class TelegramHandler implements AlertHandler {
 
   async handle(alert: Alert): Promise<void> {
     if (!this.shouldSend(alert.severity)) return;
+
+    if (this.queue.length >= MAX_QUEUE_SIZE) {
+      this.queue.shift();
+      if (!this._overflowEmitted) {
+        this._overflowEmitted = true;
+        console.error('[secclaw] Telegram alert queue overflow — dropping oldest alerts');
+      }
+    }
 
     this.queue.push(alert);
     this.scheduleDrain();
