@@ -20,6 +20,9 @@ import { DeployPauseHandler } from './response/deploy-pause.js';
 import { TokenRevokeHandler } from './response/token-revoke.js';
 import { SignerRotateHandler } from './response/signer-rotate.js';
 import { QuarantineBuilderHandler } from './response/quarantine-builder.js';
+import { GovernorFreezeHandler } from './response/governor-freeze.js';
+import { ActionBlockHandler } from './response/action-block.js';
+import { GovernanceProbe } from './probes/governance.js';
 import { runAssertions } from './policy/assertion.js';
 import { DriftDetector } from './policy/drift-detector.js';
 import { AuditCorrelator } from './audit/correlator.js';
@@ -130,6 +133,38 @@ export async function bootstrap(config: SecClawConfig): Promise<BootstrapResult>
     console.log('[secclaw] Builder quarantine response enabled');
   }
 
+  // ── Governance response handlers (only register if manifest enables) ──
+  if (!config.dryRun && manifest.governance?.enabled) {
+    const govPolicy = manifest.governance;
+    const memberKey = process.env.SECCLAW_COUNCIL_MEMBER_KEY;
+    if (memberKey && govPolicy.contracts.oversight_address) {
+      if (govPolicy.auto_response.freeze_on_critical) {
+        bus.register(new GovernorFreezeHandler({
+          oversightAddress: govPolicy.contracts.oversight_address,
+          memberKey,
+          rpcUrl: govPolicy.contracts.rpc_url,
+          chainId: govPolicy.contracts.chain_id,
+          freezeOnCritical: true,
+        }));
+        console.log('[secclaw] Governor freeze response enabled');
+      }
+      if (govPolicy.auto_response.block_action_on_warning) {
+        bus.register(new ActionBlockHandler({
+          oversightAddress: govPolicy.contracts.oversight_address,
+          memberKey,
+          rpcUrl: govPolicy.contracts.rpc_url,
+          chainId: govPolicy.contracts.chain_id,
+          blockOnWarning: true,
+        }));
+        console.log('[secclaw] Action-hash block response enabled');
+      }
+    } else if (govPolicy.auto_response.freeze_on_critical
+      || govPolicy.auto_response.block_action_on_warning) {
+      console.warn('[secclaw] Governance auto-response configured but '
+        + 'SECCLAW_COUNCIL_MEMBER_KEY or oversight_address missing — handlers not registered');
+    }
+  }
+
   const ycProbe = new YieldClawProbe(config.yieldclaw.baseUrl, config.yieldclaw.healthToken);
   const mmProbe = new MMProbe(config.mm.accountId, config.mm.network, config.mm.statusUrl || undefined);
   const guardianProbe = new PaymentLayerProbe(config.guardian.auditLogPath);
@@ -150,6 +185,7 @@ export async function bootstrap(config: SecClawConfig): Promise<BootstrapResult>
   const filesystemProbe = new FilesystemProbe(
     manifest.supplyChain?.behavioralDiff.sensitivePathBlocklist,
   );
+  const governanceProbe = new GovernanceProbe(manifest.governance ?? null);
 
   const driftDetector = new DriftDetector();
   const correlator = new AuditCorrelator();
@@ -195,6 +231,7 @@ export async function bootstrap(config: SecClawConfig): Promise<BootstrapResult>
           networkProbe.setAllowlist(newManifest.supplyChain.exfilDomainBlocklist);
           filesystemProbe.updatePaths(newManifest.supplyChain.behavioralDiff.sensitivePathBlocklist);
         }
+        governanceProbe.updatePolicy(newManifest.governance ?? null);
         console.log('[secclaw] Policy manifest reloaded');
       },
       (err) => {
@@ -217,6 +254,7 @@ export async function bootstrap(config: SecClawConfig): Promise<BootstrapResult>
   const tickFn = () => tick({
     bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe, listingProbe,
     workstationProbe, githubProbe, processProbe, networkProbe, filesystemProbe,
+    governanceProbe,
     driftDetector, correlator, escalator, digest, healthState,
     manifest, config, gateSharedState, gateStatePath, otterclawEventBuffer,
   });
@@ -293,6 +331,7 @@ interface TickContext {
   processProbe: ProcessProbe;
   networkProbe: NetworkProbe;
   filesystemProbe: FilesystemProbe;
+  governanceProbe: GovernanceProbe;
   driftDetector: DriftDetector;
   correlator: AuditCorrelator;
   escalator: AlertEscalator;
@@ -308,6 +347,7 @@ interface TickContext {
 async function tick(ctx: TickContext): Promise<boolean> {
   const { bus, ycProbe, mmProbe, guardianProbe, ocProbe, gaProbe, listingProbe,
     workstationProbe, githubProbe, processProbe, networkProbe, filesystemProbe,
+    governanceProbe,
     driftDetector, correlator, escalator, digest, healthState,
     manifest, config, gateSharedState, gateStatePath, otterclawEventBuffer } = ctx;
 
@@ -316,7 +356,7 @@ async function tick(ctx: TickContext): Promise<boolean> {
   if (config.verbose) console.log(`[secclaw] Tick starting at ${new Date().toISOString()}`);
 
   const [ycResult, mmResult, guardianResult, ocResult, gaResult, listingResult,
-    wsResult, ghResult, procResult, netResult, fsResult] = await Promise.allSettled([
+    wsResult, ghResult, procResult, netResult, fsResult, govResult] = await Promise.allSettled([
     ycProbe.probe(),
     mmProbe.probe(),
     guardianProbe.probe(),
@@ -328,6 +368,7 @@ async function tick(ctx: TickContext): Promise<boolean> {
     processProbe.probe(),
     networkProbe.probe(),
     filesystemProbe.probe(),
+    governanceProbe.probe(),
   ]);
 
   const snapshot: SystemSnapshot = {
@@ -343,10 +384,22 @@ async function tick(ctx: TickContext): Promise<boolean> {
     process: fulfilled(procResult) ?? undefined,
     network: fulfilled(netResult) ?? undefined,
     filesystem: fulfilled(fsResult) ?? undefined,
+    governance: fulfilled(govResult) ?? undefined,
     otterclawEvents: otterclawEventBuffer.length > 0
       ? otterclawEventBuffer.splice(0, otterclawEventBuffer.length)
       : undefined,
   };
+
+  // Sync frozen-governor + value-cap state from chain into the gate's shared
+  // state so synchronous gate calls can short-circuit blocked actions.
+  if (snapshot.governance?.ok && snapshot.governance.data?.oversight) {
+    const fg = gateSharedState.frozenGovernors ?? new Set<string>();
+    fg.clear();
+    for (const g of snapshot.governance.data.oversight.frozenGovernors) {
+      fg.add(g.toLowerCase());
+    }
+    gateSharedState.frozenGovernors = fg;
+  }
 
   if (config.verbose) {
     console.log(`[secclaw] Probes completed in ${Date.now() - cycleStart}ms`);

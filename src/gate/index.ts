@@ -5,6 +5,7 @@ import { checkListingCooldown } from './listing-cooldown.js';
 import { checkContractVerification } from './contract-verification.js';
 import { checkOracleTokenVerification } from './oracle-token-verifier.js';
 import { checkSlippageProtection } from './slippage-guard.js';
+import { checkGovernanceAction } from './governance-action.js';
 import { GateRequestSchema } from './request-schema.js';
 import { containsPrivateKeyMaterial } from './private-key-guard.js';
 import type {
@@ -157,6 +158,10 @@ export async function gate(
       name: 'slippage_guard',
       run: (req, m) => checkSlippageProtection(req, m),
     },
+    {
+      name: 'governance_action',
+      run: (req, m, ss) => checkGovernanceAction(req, m, ss),
+    },
   ];
 
   // TODO(tier-3): MCP tool attestation -- blocked until N > 5 builders
@@ -236,5 +241,7 @@ export function createGateSharedState(): GateSharedState {
     pendingModifications: {},
     recentListings: [],
     signerRotationTriggeredAt: null,
+    frozenGovernors: new Set(),
+    governorValueCaps: new Map(),
   };
 }

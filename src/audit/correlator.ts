@@ -17,6 +17,12 @@ import { checkFundingRateExploitation } from './rules/funding-exploitation.js';
 import { WithdrawalVelocityMonitor, checkWithdrawalVelocity } from './rules/withdrawal-velocity.js';
 import { checkSessionOwnership } from './rules/session-hijack.js';
 import { checkListingManipulation } from './rules/listing-manipulation.js';
+import { checkProposalWhaleDominance } from './rules/proposal-whale-dominance.js';
+import { checkProposerBalanceSurge } from './rules/proposer-balance-surge.js';
+import { checkVoteLandingSpike } from './rules/vote-landing-spike.js';
+import { checkLowVoterDiversity } from './rules/low-voter-diversity.js';
+import { checkQuorumEdgePassage } from './rules/quorum-edge-passage.js';
+import { checkBondStatusChange } from './rules/bond-status-change.js';
 
 const MAX_WINDOW = 10;
 
@@ -88,6 +94,14 @@ export class AuditCorrelator {
       alerts.push(...checkSandwichPattern(snapshot));
       alerts.push(...checkFundingRateExploitation(snapshot, manifest));
     }
+
+    // Governance rules — guarded inside each rule on snapshot.governance.ok.
+    alerts.push(...checkProposalWhaleDominance(snapshot, manifest));
+    alerts.push(...checkProposerBalanceSurge(snapshot, manifest));
+    alerts.push(...checkVoteLandingSpike(snapshot, manifest));
+    alerts.push(...checkLowVoterDiversity(snapshot, manifest));
+    alerts.push(...checkQuorumEdgePassage(snapshot, manifest));
+    alerts.push(...checkBondStatusChange(snapshot));
 
     return alerts;
   }

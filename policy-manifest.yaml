@@ -159,3 +159,59 @@ listing:
     - "pyth"
   minSeedLiquidityUSD: 1000
   maxSeedLiquidityUSD: 50000
+
+# ─── Governance firewall + monitoring ─────────────────────────────────
+# Pairs with on-chain GovernanceSecOversight.sol (Orderly Chain). Every
+# BuilderTimelock calls into the on-chain contract on queue() and execute();
+# SecClaw mirrors the same checks pre-tx in the synchronous gate, plus runs
+# six correlator rules on every observed proposal.
+governance:
+  enabled: true
+  # Whole-contract deny — no builder governance ever calls these. Mirrored
+  # to GovernanceSecOversight.deniedTarget at deploy time.
+  orderly_protected_targets:
+    # ORDER token (Ethereum + Orderly Chain mirror)
+    - "0xabd4c63d2616a5201454168269031355f4764337"
+    # Orderly vault — replace with the canonical address on Orderly Chain
+    - "0x0000000000000000000000000000000000000001"
+    # Orderly CLOB settlement — replace with canonical address
+    - "0x0000000000000000000000000000000000000002"
+  # Selectors that no builder governance can ever call regardless of target.
+  # Each one is a known takeover vector.
+  forbidden_selectors_global:
+    - "0x5c19a95c"  # delegate(address)
+    - "0xc3cda520"  # delegateBySig(...)
+    - "0x3659cfe6"  # upgradeTo(address)
+    - "0x4f1ef286"  # upgradeToAndCall(address,bytes)
+    - "0xf2fde38b"  # transferOwnership(address)
+    - "0x715018a6"  # renounceOwnership()
+    - "0x40c10f19"  # mint(address,uint256)
+  # Pre-emptive action-hash blocklist. Council adds an entry as
+  # "${governor}:${actionHash}" when a specific proposal is flagged.
+  action_blocklist: []
+  # Live correlator thresholds.
+  proposal_heuristics:
+    whale_dominance_threshold_bps: 5000      # 50% of forVotes
+    proposer_balance_surge_pct: 50           # %% growth in 24h pre-propose
+    vote_spike_window_blocks: 4              # forVotes 50%+ within N blocks
+    low_voter_diversity_threshold: 10        # passing with <N unique voters
+    quorum_edge_band_pct: 10                 # passes within X% of quorum
+  # Auto-response toggles.
+  auto_response:
+    freeze_on_critical: true                 # call freezeGovernor(...) on critical alert
+    block_action_on_warning: false           # surgical setBlockedActionHash(...) on warning
+    propose_slash_on_shai_hulud: true        # call BuilderBond.proposeSlashing on Shai-Hulud worm
+  # BuilderBond minimum sizes per security tier (USD). Under-bonded products
+  # become ineligible for the ORDER builder-grant gauge.
+  bond_min_size_usd:
+    silver: 25000
+    gold: 100000
+    platinum: 300000
+    diamond: 1000000
+  # On-chain wiring.
+  contracts:
+    oversight_address: "0x0000000000000000000000000000000000000000"  # GovernanceSecOversight
+    council_address: "0x0000000000000000000000000000000000000000"     # OZCouncil
+    registry_address: "0x0000000000000000000000000000000000000000"    # ProductRegistry
+    rpc_url: "https://rpc.orderly.network"
+    chain_id: 291  # Orderly Chain mainnet (4460 = Sepolia)

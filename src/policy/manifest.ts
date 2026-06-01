@@ -265,6 +265,38 @@ const ManifestSchema = z.object({
     expected_hash: z.string(),
     allowlisted_servers: z.array(z.string()),
   })).optional(),
+
+  governance: z.object({
+    enabled: z.boolean(),
+    orderly_protected_targets: z.array(z.string()),
+    forbidden_selectors_global: z.array(z.string()),
+    action_blocklist: z.array(z.string()),
+    proposal_heuristics: z.object({
+      whale_dominance_threshold_bps: z.number().int().min(0).max(10_000),
+      proposer_balance_surge_pct: z.number().nonnegative(),
+      vote_spike_window_blocks: z.number().int().nonnegative(),
+      low_voter_diversity_threshold: z.number().int().nonnegative(),
+      quorum_edge_band_pct: z.number().nonnegative(),
+    }),
+    auto_response: z.object({
+      freeze_on_critical: z.boolean(),
+      block_action_on_warning: z.boolean(),
+      propose_slash_on_shai_hulud: z.boolean(),
+    }),
+    bond_min_size_usd: z.object({
+      silver: z.number().nonnegative(),
+      gold: z.number().nonnegative(),
+      platinum: z.number().nonnegative(),
+      diamond: z.number().nonnegative(),
+    }),
+    contracts: z.object({
+      oversight_address: z.string(),
+      council_address: z.string(),
+      registry_address: z.string(),
+      rpc_url: z.string(),
+      chain_id: z.number().int().positive(),
+    }),
+  }).optional(),
 });
 
 export function loadManifest(path: string): PolicyManifest {

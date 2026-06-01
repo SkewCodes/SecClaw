@@ -113,6 +113,7 @@ export interface PolicyManifest {
     expected_hash: string;
     allowlisted_servers: string[];
   }>;
+  governance?: import('./governance.js').GovernancePolicy;
 }
 
 // ─── Listing Policy ─────────────────────────────────────────

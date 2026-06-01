@@ -17,7 +17,9 @@ export type SecClawEventModule =
   | 'otterclaw_receiver'
   | 'deploy_pause' | 'token_revoke' | 'signer_rotate' | 'quarantine_builder'
   | 'gate' | 'slippage_guard'
-  | 'skill_hash_verifier';
+  | 'skill_hash_verifier'
+  | 'governance_action' | 'governance_probe'
+  | 'governor_freeze' | 'action_block';
 
 export type SecClawEventAction = 'pass' | 'block' | 'alert' | 'escalate';
 
@@ -124,4 +126,11 @@ export interface GateSharedState {
   pendingModifications: Record<string, ModificationRequest>;
   recentListings: ListingEvent[];
   signerRotationTriggeredAt: number | null;
+  // Set of governor addresses (lowercase) frozen by SecClaw response.
+  // Synced from chain by the governance probe; gate reads to short-circuit
+  // any pre-flight call.
+  frozenGovernors?: Set<string>;
+  // Per-governor max value (wei, bigint) for governance actions; gate uses
+  // this for value-cap checks before submission.
+  governorValueCaps?: Map<string, bigint>;
 }

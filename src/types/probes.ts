@@ -361,6 +361,8 @@ export interface FilesystemSnapshot {
 
 // ─── Combined System Snapshot ─────────────────────────────────
 
+import type { GovernanceSnapshot } from './governance.js';
+
 export interface SystemSnapshot {
   timestamp: number;
   yieldclaw: ProbeResult<YieldClawSnapshot>;
@@ -375,4 +377,5 @@ export interface SystemSnapshot {
   network?: ProbeResult<NetworkSnapshot>;
   filesystem?: ProbeResult<FilesystemSnapshot>;
   otterclawEvents?: OtterClawBridgeEvent[];
+  governance?: ProbeResult<GovernanceSnapshot>;
 }
